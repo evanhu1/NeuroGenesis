@@ -24,10 +24,4 @@ public class Cell : MonoBehaviour {
     void OnMouseExit() {
         sprite.color += new Color(0.1f, 0.1f, 0.1f, 0f);
     }
-
-    void OnMouseUp() {
-        Debug.Log(x);
-        Debug.Log(y);
-        Debug.Log(Grid.Instance.checkOrganismExistsAt(x, y));
-    }
 }

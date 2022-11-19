@@ -5,11 +5,10 @@ using UnityEngine;
 
 public class Genome {
     List<Gene> genes;
-    Organism organism;
     int numSynapses;
     
-    public Genome(Brain brain, Organism organism) {
-        this.organism = organism;
+    // Creates a Genome (blueprint) object for "brain"
+    public Genome(Brain brain) {
         genes = new List<Gene>();
         foreach (InterNeuron neuron in brain.Neurons) {
             genes.Add(new Gene(neuron));
@@ -20,10 +19,10 @@ public class Genome {
         foreach (ActionNeuron actionNeuron in brain.ActionNeurons) {
             genes.Add(new Gene(actionNeuron));
         }
-        foreach (Gene g in genes) Debug.Log(g.type);
     }
-
-    public Brain constructBrain(float mutateChance, float mutationMagnitude) {
+    
+    // Creates a new Brain object according to the genome blueprint, and passes "newOrganism" to the new brain.
+    public Brain constructBrain(Organism newOrganism, float mutateChance, float mutationMagnitude) {
         List<SensoryNeuron> sensoryNeurons = new List<SensoryNeuron>();
         List<InterNeuron> neurons = new List<InterNeuron>();
         List<ActionNeuron> actionNeurons = new List<ActionNeuron>();
@@ -40,9 +39,10 @@ public class Genome {
                         gene.actionPotentialThreshold,
                         gene.restingPotential,
                         gene.actionPotentialLength,
+                        gene.potentialDecayRate,
                         gene.neurotransmitters,
                         new List<Synapse>(),
-                        new SensoryReceptor((SensoryReceptorType)gene.neuronID, organism, gene.sensorySensitivity)
+                        new SensoryReceptor((SensoryReceptorType)gene.neuronID, newOrganism, gene.sensorySensitivity)
                     );
                     sensoryNeurons.Add(newSensory);
                     neuronMap[Tuple.Create((int) gene.type, gene.neuronID)] = newSensory;
@@ -53,6 +53,7 @@ public class Genome {
                         gene.actionPotentialThreshold,
                         gene.restingPotential,
                         gene.actionPotentialLength,
+                        gene.potentialDecayRate,
                         gene.neurotransmitters,
                         new List<Synapse>(),
                         new List<NeurotransmitterReceptor>()
@@ -66,6 +67,7 @@ public class Genome {
                         gene.actionPotentialThreshold,
                         gene.restingPotential,
                         gene.actionPotentialLength,
+                        gene.potentialDecayRate,
                         gene.neurotransmitters,
                         new List<NeurotransmitterReceptor>(),
                         (ActionType)gene.neuronID
@@ -95,6 +97,6 @@ public class Genome {
             }
         }
 
-        return new Brain(organism, numSynapses, neurons, sensoryNeurons, actionNeurons);
+        return new Brain(newOrganism, numSynapses, neurons, sensoryNeurons, actionNeurons);
     }
 }

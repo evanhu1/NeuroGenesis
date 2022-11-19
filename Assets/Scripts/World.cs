@@ -16,7 +16,6 @@ public class World : MonoBehaviour {
     public int numSynapses = 10;
     public float mutationChance;
     public float mutationMagnitude;
-    Coroutine simulationLoop;
     Organism focusedOrganism;
 
     void Start() {
@@ -32,7 +31,7 @@ public class World : MonoBehaviour {
                 int x = Random.Range(0, grid.columns);
                 int y = Random.Range(0, grid.rows);
                 if (manager.OrganismDict.ContainsKey(Tuple.Create(x, y))) continue;
-                createOrganism(x, y, null);
+                createOrganism(i, x, y);
                 break;
             }
         }
@@ -44,12 +43,21 @@ public class World : MonoBehaviour {
         focusedOrganism.GetComponent<SpriteRenderer>().color = Color.blue;
     }
 
-    void createOrganism(int x, int y, Brain brain) {
+    void createOrganism(int id, int x, int y) {
         Vector3 pos = grid.getPosition(x, y);
         Organism newOrganism = Instantiate(manager.organism, pos, Quaternion.identity);
-        if (brain == null) newOrganism.Init(x, y, numNeurons, numSynapses);
-        else newOrganism.InitWithBrain(x, y, brain);
+        newOrganism.Init(id, x, y, numNeurons, numSynapses);
         manager.addOrganism(newOrganism, x, y);
+    }
+
+    void spawnOffspring(Organism parent) {
+        int x = parent.x;
+        int y = parent.y;
+        Vector3 pos = grid.getPosition(x, y);
+        Organism child = Instantiate(manager.organism, pos, Quaternion.identity);
+        child.InitWithBrain(manager.organismList.Count, x, y,
+            parent.Genome.constructBrain(child, mutationChance, mutationMagnitude));
+        manager.addOrganism(child, x, y);
     }
 
     void killOrganism(Organism organism) {
@@ -63,31 +71,60 @@ public class World : MonoBehaviour {
         }
     }
 
-    bool survivalCheck(Organism organism) {
-        return true;
-        // return organism.x < 10 && organism.y < 10;
+    public bool survivalCheck(Organism organism) {
+        return organism.y > Grid.Instance.rows / 2;
+        // return true;
+        // return (Grid.Instance.columns / 4) < organism.x 
+        //        && organism.x <= (Grid.Instance.columns * 3 / 4)
+        //        && (Grid.Instance.rows / 4) < organism.y 
+        //        && organism.y <= (Grid.Instance.rows * 3 / 4);
     }
 
-    IEnumerator simulateEpoch() {
+    IEnumerator simulateEpoch(bool wait) {
+        scatterOrganisms();
         for (int i = 0; i < simulationStepsPerEpoch; i++) {
             executeOrganismActions();
-            yield return new WaitForSeconds(1.0f / simulationStepsPerSecond);
+            if (wait) yield return new WaitForSeconds(1.0f / simulationStepsPerSecond);
         }
 
         foreach (Organism organism in manager.organismList.ToList()) {
-            if (survivalCheck(organism)) {
-                createOrganism(organism.x + 1, organism.y, organism.Genome.constructBrain(mutationChance, mutationMagnitude));
-            }
-            else {
+            if (!survivalCheck(organism)) {
                 killOrganism(organism);
             }
         }
-    }
 
+        if (manager.organismList.Count > 0) {
+            int originalCount = manager.organismList.Count;
+            while (manager.organismList.Count < numOrganisms) {
+                if (Random.value < 0.75) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
+                else createOrganism(manager.organismList.Count, 0, 0);
+            }
+        } else {
+            for (int i = 0; i < numOrganisms; i++) {
+                createOrganism(i, 0, 0);
+            }
+        }
+    }
+    
+    // Places all existing organisms randomly on the grid
+    void scatterOrganisms() {
+        foreach (Organism org in manager.organismList) {
+            int newX = Random.Range(0, Grid.Instance.columns);
+            int newY = Random.Range(0, Grid.Instance.rows);
+            org.move(newX, newY);
+        }
+    }
+    
     // Update is called once per frame
     void Update() {
         if (Input.GetKeyUp("space")) {
-            simulationLoop = StartCoroutine(simulateEpoch());
+            StartCoroutine(simulateEpoch(true));
+        }
+        if (Input.GetKeyUp("s")) {
+            StartCoroutine(simulateEpoch(false));
+        }
+        if (Input.GetKeyUp("f")) {
+            for (int i = 0; i < 10; i++) StartCoroutine(simulateEpoch(false));
         }
         if (Input.GetKeyUp("n")) {
             executeOrganismActions();

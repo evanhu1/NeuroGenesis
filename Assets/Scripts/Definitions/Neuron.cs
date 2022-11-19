@@ -21,6 +21,7 @@ namespace Definitions {
             float actionPotentialThreshold,
             float restingPotential,
             int actionPotentialLength,
+            float potentialDecayRate,
             HashSet<NeurotransmitterType> neurotransmitters,
             NeuronType type
         ) {
@@ -28,6 +29,7 @@ namespace Definitions {
             this.actionPotentialThreshold = actionPotentialThreshold;
             this.restingPotential = restingPotential;
             this.actionPotentialLength = actionPotentialLength;
+            PotentialDecayRate = potentialDecayRate;
             potential = restingPotential;
             Type = type;
             Neurotransmitters = neurotransmitters;
@@ -47,7 +49,7 @@ namespace Definitions {
         protected Neuron() {
             actionPotentialThreshold = -55f;
             restingPotential = -70f;
-            PotentialDecayRate = Random.Range(0.7f, 0.9f);
+            PotentialDecayRate = Random.Range(0.5f, 0.9f);
             potential = restingPotential;
             actionPotentialLength = Random.Range(0, 3);
             actionPotentialTime = -1;

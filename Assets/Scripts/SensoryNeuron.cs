@@ -16,6 +16,7 @@ public class SensoryNeuron : Neuron, IInputNeuron {
         float actionPotentialThreshold,
         float restingPotential,
         int actionPotentialTime,
+        float potentialDecayRate,
         HashSet<NeurotransmitterType> neurotransmitters,
         List<Synapse> synapses,
         SensoryReceptor receptor
@@ -24,6 +25,7 @@ public class SensoryNeuron : Neuron, IInputNeuron {
         actionPotentialThreshold,
         restingPotential,
         actionPotentialTime,
+        potentialDecayRate,
         neurotransmitters,
         NeuronType.SensoryNeuron
     ) {

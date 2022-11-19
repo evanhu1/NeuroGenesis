@@ -30,7 +30,6 @@ public class Gene {
     public float restingPotential;
     public float potentialDecayRate;
     public float sensorySensitivity;
-    public Organism organism;
     
     public Gene(Neuron neuron) {
         neurotransmitters = neuron.Neurotransmitters;

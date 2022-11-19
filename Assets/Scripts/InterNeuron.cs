@@ -21,6 +21,7 @@ public class InterNeuron : Neuron, IInputNeuron, IOutputNeuron {
         float actionPotentialThreshold,
         float restingPotential,
         int actionPotentialTime,
+        float potentialDecayRate,
         HashSet<NeurotransmitterType> neurotransmitters,
         List<Synapse> synapses,
         List<NeurotransmitterReceptor> receptors
@@ -29,6 +30,7 @@ public class InterNeuron : Neuron, IInputNeuron, IOutputNeuron {
         actionPotentialThreshold,
         restingPotential,
         actionPotentialTime,
+        potentialDecayRate,
         neurotransmitters,
         NeuronType.InterNeuron
     ) {

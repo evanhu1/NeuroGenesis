@@ -8,19 +8,22 @@ public class Organism : MonoBehaviour {
     public int x, y;
     Brain brain;
     public Genome Genome;
+    public int OrganismID;
 
-    public void Init(int newX, int newY, int numNeurons, int numSynapses) {
+    public void Init(int id, int newX, int newY, int numNeurons, int numSynapses) {
         x = newX;
         y = newY;
+        OrganismID = id;
         brain = new Brain(this, numNeurons, numSynapses);
-        Genome = new Genome(brain, this);
+        Genome = new Genome(brain);
     }
     
-    public void InitWithBrain(int newX, int newY, Brain b) {
+    public void InitWithBrain(int id, int newX, int newY, Brain b) {
+        OrganismID = id;
         x = newX;
         y = newY;
         brain = b;
-        Genome = new Genome(brain, this);
+        Genome = new Genome(brain);
     }
 
     public void simulateStep() {
@@ -45,7 +48,7 @@ public class Organism : MonoBehaviour {
         }
     }
 
-    void move(int newX, int newY) {
+    public void move(int newX, int newY) {
         if (Grid.Instance.checkOutOfBounds(newX, newY)) return;
         Grid.Instance.moveOrganism(this, newX, newY);
         x = newX;
@@ -57,5 +60,7 @@ public class Organism : MonoBehaviour {
         // brain.printSensors();
         DrawBrain.Instance.drawBrain(brain);
         Grid.Instance.world.changeFocus(this);
+        Debug.Log(OrganismID);
+        Debug.Log(Grid.Instance.world.survivalCheck(this));
     }
 }

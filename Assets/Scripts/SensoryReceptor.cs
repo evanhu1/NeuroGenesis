@@ -23,10 +23,10 @@ public class SensoryReceptor {
         Type = type;
     }
     
-    // Argument bounds format: [left, right, top, bottom]
+    // Argument bounds format: [left, right, bottom, top]
     int look(IReadOnlyList<int> bounds) {
         int signalStrength = 0;
-        for (int y = bounds[2]; y <= bounds[3]; y++) {
+        for (int y = bounds[2]; y < bounds[3]; y++) {
             for (int x = bounds[0]; x < bounds[1]; x++) {
                 if (Grid.Instance.checkOutOfBounds(x, y) || Grid.Instance.checkOrganismExistsAt(x, y)) {
                     signalStrength++;

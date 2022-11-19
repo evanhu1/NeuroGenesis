@@ -12,6 +12,7 @@ public class ActionNeuron : Neuron, IOutputNeuron {
         float actionPotentialThreshold,
         float restingPotential,
         int actionPotentialLength,
+        float potentialDecayRate,
         HashSet<NeurotransmitterType> neurotransmitters,
         List<NeurotransmitterReceptor> receptors,
         ActionType actionType
@@ -20,6 +21,7 @@ public class ActionNeuron : Neuron, IOutputNeuron {
         actionPotentialThreshold,
         restingPotential,
         actionPotentialLength,
+        potentialDecayRate,
         neurotransmitters,
         NeuronType.ActionNeuron
     ) {

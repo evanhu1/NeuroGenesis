@@ -16,7 +16,7 @@ public class Synapse {
     }
 
     public Synapse(IInputNeuron preSynapticNeuron, IOutputNeuron postSynapticNeuron) {
-        FireProbability = Random.Range(0.5f, 1.0f);
+        FireProbability = Random.Range(0.3f, 1.0f);
         PostSynapticNeuron = postSynapticNeuron;
         PreSynapticNeuron = preSynapticNeuron;
     }
