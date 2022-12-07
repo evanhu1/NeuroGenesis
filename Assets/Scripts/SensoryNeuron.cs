@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using Definitions;
 using UnityEngine;
 
-public class SensoryNeuron : Neuron, IInputNeuron {
+public class SensoryNeuron : Neuron, IOutputNeuron {
     public SensoryReceptor Receptor;
     public List<Synapse> Synapses { get; set; }
 
@@ -17,7 +17,6 @@ public class SensoryNeuron : Neuron, IInputNeuron {
         float restingPotential,
         int actionPotentialTime,
         float potentialDecayRate,
-        HashSet<NeurotransmitterType> neurotransmitters,
         List<Synapse> synapses,
         SensoryReceptor receptor
     ) : base(
@@ -26,28 +25,10 @@ public class SensoryNeuron : Neuron, IInputNeuron {
         restingPotential,
         actionPotentialTime,
         potentialDecayRate,
-        neurotransmitters,
         NeuronType.SensoryNeuron
     ) {
         Synapses = synapses;
         Receptor = receptor;
-    }
-
-    public void createSynapse(IOutputNeuron postSynapticNeuron, float fireChance) {
-        if (((Neuron) postSynapticNeuron).NeuronID == NeuronID) return;
-        foreach (Synapse synapse in Synapses) {
-            if (synapse.PostSynapticNeuron == postSynapticNeuron) {
-                return;
-            }
-        }
-
-        Synapses.Add(fireChance < 0
-            ? new Synapse(this, postSynapticNeuron)
-            : new Synapse(fireChance, this, postSynapticNeuron));
-    }
-
-    public override void sumPotentials() {
-        potential += Receptor.getValue();
     }
     
     public override void fireActionPotential() {
@@ -58,5 +39,6 @@ public class SensoryNeuron : Neuron, IInputNeuron {
 
     public void updateReceptor() {
         Receptor.updateValue();
+        incomingCurrent = Receptor.getValue();
     }
 }

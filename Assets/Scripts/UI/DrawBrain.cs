@@ -84,8 +84,8 @@ namespace UI {
             }
         }
 
-        void drawSynapse(IInputNeuron inputNeuron, Brain brain) {
-            foreach (Synapse synapse in inputNeuron.Synapses) {
+        void drawSynapse(IOutputNeuron outputNeuron, Brain brain) {
+            foreach (Synapse synapse in outputNeuron.Synapses) {
                 Neuron preSynapticNeuron = (Neuron)synapse.PreSynapticNeuron;
                 Neuron postSynapticNeuron = (Neuron)synapse.PostSynapticNeuron;
                 LineRenderer drawer = Instantiate(lineRenderer, transform.position, Quaternion.identity);

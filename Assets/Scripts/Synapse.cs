@@ -1,35 +1,33 @@
-using System;
-using System.Collections.Generic;
 using Definitions;
 using Random = UnityEngine.Random;
 
 public class Synapse {
-    // Chance that this synapse will fire during an action potential
+    /// <summary>
+    /// Chance that this synapse will fire during an action potential
+    /// </summary>
     public float FireProbability;
-    public IInputNeuron PreSynapticNeuron;
-    public IOutputNeuron PostSynapticNeuron;
-
-    public Synapse(float releaseProbability, IInputNeuron preSynapticNeuron, IOutputNeuron postSynapticNeuron) {
-        FireProbability = releaseProbability;
-        PostSynapticNeuron = postSynapticNeuron;
+    
+    /// <summary>
+    /// The additive impact (Amperes) this synapse has on the post-synaptic neuron.
+    /// </summary>
+    public float SynapticStrength;
+    
+    public IOutputNeuron PreSynapticNeuron;
+    public Neuron PostSynapticNeuron;
+    
+    /// <summary>
+    /// Randomly initializes RELEASE_PROBABILITY and SYNAPTIC_STRENGTH if negative values are passed in for either.
+    /// </summary>
+    public Synapse(IOutputNeuron preSynapticNeuron, Neuron postSynapticNeuron, float fireProbability, float synapticStrength) {
         PreSynapticNeuron = preSynapticNeuron;
-    }
-
-    public Synapse(IInputNeuron preSynapticNeuron, IOutputNeuron postSynapticNeuron) {
-        FireProbability = Random.Range(0.3f, 1.0f);
         PostSynapticNeuron = postSynapticNeuron;
-        PreSynapticNeuron = preSynapticNeuron;
+        FireProbability = fireProbability < 0 ? Random.Range(0.3f, 1.0f) : fireProbability;
+        SynapticStrength = synapticStrength < 0 ? Random.Range(-10f, 10f) : synapticStrength;
     }
 
     public void fireSignal() {
         if (Random.value < FireProbability) {
-            foreach (NeurotransmitterReceptor receptor in PostSynapticNeuron.Receptors) {
-                HashSet<NeurotransmitterType> matchingNeurotransmitters = new (((Neuron) PreSynapticNeuron).Neurotransmitters);
-                matchingNeurotransmitters.IntersectWith(receptor.MatchingNeurotransmitters);
-                if (matchingNeurotransmitters.Count > 0) {
-                    receptor.trigger();
-                }
-            }
+            PostSynapticNeuron.incomingCurrent += SynapticStrength;
         }
     }
 }

@@ -56,14 +56,14 @@ public class Brain {
     /// </summary>
     void createSynapse() {
         int preNeuronIndex = Random.Range(0, Neurons.Count + numSensors);
-        IInputNeuron preSynapticNeuron = preNeuronIndex < Neurons.Count
+        IOutputNeuron preSynapticNeuron = preNeuronIndex < Neurons.Count
             ? Neurons[preNeuronIndex]
             : SensoryNeurons[preNeuronIndex - Neurons.Count];
         int postNeuronIndex = Random.Range(0, Neurons.Count + numActions);
-        IOutputNeuron postSynapticNeuron = postNeuronIndex < Neurons.Count
+        Neuron postSynapticNeuron = postNeuronIndex < Neurons.Count
             ? Neurons[postNeuronIndex]
             : ActionNeurons[postNeuronIndex - Neurons.Count];
-        preSynapticNeuron.createSynapse(postSynapticNeuron, -1);
+        preSynapticNeuron.createSynapse(postSynapticNeuron, -1, -1);
     }
 
     void generateNeurons() {
@@ -89,8 +89,8 @@ public class Brain {
     }
 
     // Simulates one time step. Each time step the following occurs in order:
-    // 1. Sensory receptors are reevaluated
-    // 2. All potential summations are recomputed
+    // 1. Sensory receptors are evaluated
+    // 2. All potential summations are computed
     // 3. Action potentials are initiated
     // 4. Axon neurotransmitters are released
     // 5. Actions are taken if action neurons experience action potential

@@ -3,18 +3,29 @@ using UnityEngine;
 
 namespace Definitions {
     public abstract class Neuron {
-        public HashSet<NeurotransmitterType> Neurotransmitters;
         public NeuronType Type;
         public float actionPotentialThreshold;
         public float restingPotential;
         public float potential;
         public float PotentialDecayRate;
         public readonly int NeuronID;
-        // Number of simulation steps for an action potential to fire once initiated
+        
+        /// <summary>
+        /// Number of simulation steps for an action potential to fire once initiated
+        /// </summary>
         public int actionPotentialLength;
-        // Number of simulation steps since the last action potential was initiated,
-        // Value is set to -1 when no actionPotential is in progress
+        
+        /// <summary>
+        ///  Number of simulation steps since the last action potential was initiated.
+        ///  Value is set to -1 when no actionPotential is in progress.
+        /// </summary>
         protected int actionPotentialTime;
+        
+        /// <summary>
+        ///  The total incoming current (Amperes) accumulated from the action potentials of other connected neurons
+        ///  (or the sensory receptor for SensoryNeurons).
+        /// </summary>
+        public float incomingCurrent;
     
         protected Neuron(
             int NeuronID,
@@ -22,7 +33,6 @@ namespace Definitions {
             float restingPotential,
             int actionPotentialLength,
             float potentialDecayRate,
-            HashSet<NeurotransmitterType> neurotransmitters,
             NeuronType type
         ) {
             this.NeuronID = NeuronID;
@@ -32,18 +42,16 @@ namespace Definitions {
             PotentialDecayRate = potentialDecayRate;
             potential = restingPotential;
             Type = type;
-            Neurotransmitters = neurotransmitters;
         }
         
         /// <summary>
-        /// Initializes ID, type, and generates a random set of matching neurotransmitters
+        /// Initializes ID and type from input, and randomly sets all other parameters.
         /// </summary>
         /// <param name="NeuronID"></param>
         /// <param name="type"></param>
         protected Neuron(int NeuronID, NeuronType type) : this() {
             this.NeuronID = NeuronID;
             Type = type;
-            Neurotransmitters = NeurotransmitterReceptor.generateRandomNeurotransmitters();
         }
 
         protected Neuron() {
@@ -78,7 +86,10 @@ namespace Definitions {
             }
         }
 
-        public abstract void sumPotentials();
+        public void sumPotentials() {
+            potential += incomingCurrent;
+            incomingCurrent = 0;
+        }
 
         public bool thresholdReached() => potential > actionPotentialThreshold;
     }
