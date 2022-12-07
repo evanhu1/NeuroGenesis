@@ -72,36 +72,43 @@ public class World : MonoBehaviour {
     }
 
     public bool survivalCheck(Organism organism) {
-        return organism.y > Grid.Instance.rows / 2;
+        // return organism.y > Grid.Instance.rows / 2;
         // return true;
-        // return (Grid.Instance.columns / 4) < organism.x 
-        //        && organism.x <= (Grid.Instance.columns * 3 / 4)
-        //        && (Grid.Instance.rows / 4) < organism.y 
-        //        && organism.y <= (Grid.Instance.rows * 3 / 4);
+        return (Grid.Instance.columns / 4) < organism.x 
+               && organism.x <= (Grid.Instance.columns * 3 / 4)
+               && (Grid.Instance.rows / 4) < organism.y 
+               && organism.y <= (Grid.Instance.rows * 3 / 4);
     }
 
-    IEnumerator simulateEpoch(bool wait) {
-        scatterOrganisms();
-        for (int i = 0; i < simulationStepsPerEpoch; i++) {
-            executeOrganismActions();
-            if (wait) yield return new WaitForSeconds(1.0f / simulationStepsPerSecond);
-        }
-
-        foreach (Organism organism in manager.organismList.ToList()) {
-            if (!survivalCheck(organism)) {
-                killOrganism(organism);
+    IEnumerator simulateEpochs(int epochs, bool wait) {
+        for (int epoch = 0; epoch < epochs; epoch++) {
+            scatterOrganisms();
+            for (int i = 0; i < simulationStepsPerEpoch; i++) {
+                executeOrganismActions();
+                if (wait) yield return new WaitForSeconds(1.0f / simulationStepsPerSecond);
             }
-        }
 
-        if (manager.organismList.Count > 0) {
-            int originalCount = manager.organismList.Count;
-            while (manager.organismList.Count < numOrganisms) {
-                if (Random.value < 0.75) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
-                else createOrganism(manager.organismList.Count, 0, 0);
+            foreach (Organism organism in manager.organismList.ToList()) {
+                bool isSurviving = survivalCheck(organism);
+
+                // Randomly preserve 2% of the unfit population / kill 5% of fit population
+                if ((!isSurviving && Random.value < 0.98) || (isSurviving && Random.value < 0.05)) {
+                    killOrganism(organism);
+                }
             }
-        } else {
-            for (int i = 0; i < numOrganisms; i++) {
-                createOrganism(i, 0, 0);
+
+            // Fill in 80% of lacking population by cloning survivors, and the remaining 20% by creating new Organisms
+            if (manager.organismList.Count > 0) {
+                int originalCount = manager.organismList.Count;
+                while (manager.organismList.Count < numOrganisms) {
+                    if (Random.value < 0.8) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
+                    else createOrganism(manager.organismList.Count, 0, 0);
+                }
+            }
+            else {
+                for (int i = 0; i < numOrganisms; i++) {
+                    createOrganism(i, 0, 0);
+                }
             }
         }
     }
@@ -115,19 +122,22 @@ public class World : MonoBehaviour {
         }
     }
     
-    // Update is called once per frame
+    // Update is called once per frame.
     void Update() {
         if (Input.GetKeyUp("space")) {
-            StartCoroutine(simulateEpoch(true));
+            StartCoroutine(simulateEpochs(1, true));
         }
         if (Input.GetKeyUp("s")) {
-            StartCoroutine(simulateEpoch(false));
+            StartCoroutine(simulateEpochs(1, false));
         }
         if (Input.GetKeyUp("f")) {
-            for (int i = 0; i < 10; i++) StartCoroutine(simulateEpoch(false));
+            StartCoroutine(simulateEpochs(10, false));
         }
         if (Input.GetKeyUp("n")) {
             executeOrganismActions();
+        }
+        if (Input.GetKeyUp("r")) {
+            scatterOrganisms();
         }
     }
 }

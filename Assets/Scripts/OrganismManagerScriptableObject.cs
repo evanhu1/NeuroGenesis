@@ -22,6 +22,6 @@ public class OrganismManagerScriptableObject : ScriptableObject {
 
     public void deleteOrganism(Organism org) {
         organismList.Remove(org);
-        OrganismDict.Remove(Tuple.Create(org.x, org.y));
+        OrganismDict[Tuple.Create(org.x, org.y)].Remove(org);
     }
 }
