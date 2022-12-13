@@ -1,3 +1,4 @@
+using TMPro;
 using UnityEngine;
 using Button = UnityEngine.UI.Button;
 
@@ -5,10 +6,12 @@ namespace UI {
     public class GameUIManager : MonoBehaviour {
         public Button animateSingle, skipSingle, skipTen, scatterOrganisms, benchmarkEpoch;
         public World world;
+        public TextMeshProUGUI epochLabel;
+        public static GameUIManager Instance { get; private set; }
         
         // Start is called before the first frame update
-        void Start()
-        {
+        void Start() {
+            Instance = this;
             animateSingle.onClick.AddListener(() => StartCoroutine(world.simulateEpochs(1, true)));
             skipSingle.onClick.AddListener(() => StartCoroutine(world.simulateEpochs(1, false)));
             skipTen.onClick.AddListener(() => StartCoroutine(world.simulateEpochs(10, false)));

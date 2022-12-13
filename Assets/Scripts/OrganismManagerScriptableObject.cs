@@ -10,7 +10,8 @@ public class OrganismManagerScriptableObject : ScriptableObject {
     public Dictionary<Tuple<int, int>, HashSet<Organism>> OrganismDict;
 
     public void addOrganism(Organism newOrganism, int x, int y) {
-        OrganismDict[Tuple.Create(x, y)] = new HashSet<Organism> { newOrganism };
+        if (!OrganismDict.ContainsKey(Tuple.Create(x, y))) OrganismDict[Tuple.Create(x, y)] = new HashSet<Organism>();
+        OrganismDict[Tuple.Create(x, y)].Add(newOrganism);
         organismList.Add(newOrganism);
     }
     

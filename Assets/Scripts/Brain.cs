@@ -8,7 +8,7 @@ public class Brain {
     int numActions = (int) ActionType.NumActions;
     int numSensors = (int) SensoryReceptorType.NumTypes;
     int numNeurons;
-    int numSynapses;
+    public int numSynapses;
     public List<InterNeuron> Neurons;
     public List<SensoryNeuron> SensoryNeurons;
     public List<ActionNeuron> ActionNeurons;
@@ -147,12 +147,5 @@ public class Brain {
         }
 
         return actionOutcomes;
-    }
-
-    public void printSensors() {
-        // foreach (SensoryNeuron sensoryNeuron in sensoryNeurons) {
-        //     Debug.Log(sensoryNeuron.Receptor.Type);
-        //     Debug.Log(sensoryNeuron.Receptor.getValue());
-        // }
     }
 }

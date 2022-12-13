@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using UI;
 using UnityEngine;
 using UnityEngine.Assertions;
 using Random = UnityEngine.Random;
@@ -18,24 +19,21 @@ public class World : MonoBehaviour {
     public float mutationChance;
     public float mutationMagnitude;
     Organism focusedOrganism;
+    public int CurrentEpoch;
 
     void Start() {
-        Assert.IsTrue(numOrganisms < grid.columns * grid.rows);
-
         manager.organismList = new List<Organism>();
         manager.OrganismDict = new Dictionary<Tuple<int, int>, HashSet<Organism>>();
 
         grid.Init();
 
         for (int i = 0; i < numOrganisms; i++) {
-            while (true) {
-                int x = Random.Range(0, grid.columns);
-                int y = Random.Range(0, grid.rows);
-                if (manager.OrganismDict.ContainsKey(Tuple.Create(x, y))) continue;
-                createOrganism(i, x, y);
-                break;
-            }
+            int x = Random.Range(0, grid.columns);
+            int y = Random.Range(0, grid.rows);
+            createOrganism(i, x, y);
         }
+
+        CurrentEpoch = 0;
     }
 
     public void changeFocus(Organism organism) {
@@ -90,6 +88,7 @@ public class World : MonoBehaviour {
                 killOrganism(organism);
             }
         }
+        print(manager.organismList.Count);
 
         // Fill in 80% of lacking population by cloning survivors, and the remaining 20% by creating new Organisms
         if (manager.organismList.Count > 0) {
@@ -108,6 +107,8 @@ public class World : MonoBehaviour {
     
     public IEnumerator simulateEpochs(int epochs, bool wait) {
         for (int epoch = 0; epoch < epochs; epoch++) {
+            processSurvivingOrganisms();
+
             scatterOrganisms();
             for (int i = 0; i < simulationStepsPerEpoch; i++) {
                 executeOrganismActions();
@@ -115,16 +116,20 @@ public class World : MonoBehaviour {
             }
         }
 
-        processSurvivingOrganisms();
+        CurrentEpoch += epochs;
+        GameUIManager.Instance.epochLabel.text = "Epoch: " + CurrentEpoch;
     }
 
-    public void simulateEpoch() {
+    void simulateEpoch() {
+        processSurvivingOrganisms();
+        
         scatterOrganisms();
         for (int i = 0; i < simulationStepsPerEpoch; i++) {
             executeOrganismActions();
         }
         
-        processSurvivingOrganisms();
+        CurrentEpoch++;
+        GameUIManager.Instance.epochLabel.text = "Epoch: " + CurrentEpoch;
     }
     
     // Places all existing organisms randomly on the grid

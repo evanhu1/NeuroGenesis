@@ -57,10 +57,9 @@ public class Organism : MonoBehaviour {
     }
 
     void OnMouseUp() {
-        // brain.printSensors();
         DrawBrain.Instance.drawBrain(brain);
         Grid.Instance.world.changeFocus(this);
-        Debug.Log(OrganismID);
-        Debug.Log(Grid.Instance.world.survivalCheck(this));
+        print(brain.Neurons.Count);
+        print(brain.numSynapses);
     }
 }
