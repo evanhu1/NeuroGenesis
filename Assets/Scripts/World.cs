@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using UnityEngine;
 using UnityEngine.Assertions;
@@ -80,64 +81,73 @@ public class World : MonoBehaviour {
                && organism.y <= (Grid.Instance.rows * 3 / 4);
     }
 
-    IEnumerator simulateEpochs(int epochs, bool wait) {
+    void processSurvivingOrganisms() {
+        foreach (Organism organism in manager.organismList.ToList()) {
+            bool isSurviving = survivalCheck(organism);
+
+            // Randomly preserve 2% of the unfit population / kill 5% of fit population
+            if ((!isSurviving && Random.value < 0.98) || (isSurviving && Random.value < 0.05)) {
+                killOrganism(organism);
+            }
+        }
+
+        // Fill in 80% of lacking population by cloning survivors, and the remaining 20% by creating new Organisms
+        if (manager.organismList.Count > 0) {
+            int originalCount = manager.organismList.Count;
+            while (manager.organismList.Count < numOrganisms) {
+                if (Random.value < 0.8) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
+                else createOrganism(manager.organismList.Count, 0, 0);
+            }
+        }
+        else {
+            for (int i = 0; i < numOrganisms; i++) {
+                createOrganism(i, 0, 0);
+            }
+        }
+    }
+    
+    public IEnumerator simulateEpochs(int epochs, bool wait) {
         for (int epoch = 0; epoch < epochs; epoch++) {
             scatterOrganisms();
             for (int i = 0; i < simulationStepsPerEpoch; i++) {
                 executeOrganismActions();
                 if (wait) yield return new WaitForSeconds(1.0f / simulationStepsPerSecond);
             }
-
-            foreach (Organism organism in manager.organismList.ToList()) {
-                bool isSurviving = survivalCheck(organism);
-
-                // Randomly preserve 2% of the unfit population / kill 5% of fit population
-                if ((!isSurviving && Random.value < 0.98) || (isSurviving && Random.value < 0.05)) {
-                    killOrganism(organism);
-                }
-            }
-
-            // Fill in 80% of lacking population by cloning survivors, and the remaining 20% by creating new Organisms
-            if (manager.organismList.Count > 0) {
-                int originalCount = manager.organismList.Count;
-                while (manager.organismList.Count < numOrganisms) {
-                    if (Random.value < 0.8) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
-                    else createOrganism(manager.organismList.Count, 0, 0);
-                }
-            }
-            else {
-                for (int i = 0; i < numOrganisms; i++) {
-                    createOrganism(i, 0, 0);
-                }
-            }
         }
+
+        processSurvivingOrganisms();
+    }
+
+    public void simulateEpoch() {
+        scatterOrganisms();
+        for (int i = 0; i < simulationStepsPerEpoch; i++) {
+            executeOrganismActions();
+        }
+        
+        processSurvivingOrganisms();
     }
     
     // Places all existing organisms randomly on the grid
-    void scatterOrganisms() {
+    public void scatterOrganisms() {
         foreach (Organism org in manager.organismList) {
             int newX = Random.Range(0, Grid.Instance.columns);
             int newY = Random.Range(0, Grid.Instance.rows);
             org.move(newX, newY);
         }
     }
+
+    public double benchmarkEpoch() {
+        Stopwatch sw = new Stopwatch();
+        sw.Start();
+        simulateEpoch();
+        sw.Stop();
+        return sw.ElapsedMilliseconds * 1000.0 / (simulationStepsPerEpoch * (numNeurons + numSynapses) * numOrganisms);
+    }
     
     // Update is called once per frame.
     void Update() {
-        if (Input.GetKeyUp("space")) {
-            StartCoroutine(simulateEpochs(1, true));
-        }
-        if (Input.GetKeyUp("s")) {
-            StartCoroutine(simulateEpochs(1, false));
-        }
-        if (Input.GetKeyUp("f")) {
-            StartCoroutine(simulateEpochs(10, false));
-        }
         if (Input.GetKeyUp("n")) {
             executeOrganismActions();
-        }
-        if (Input.GetKeyUp("r")) {
-            scatterOrganisms();
         }
     }
 }
