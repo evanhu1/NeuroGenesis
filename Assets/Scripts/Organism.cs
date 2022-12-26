@@ -6,7 +6,7 @@ using UnityEngine;
 
 public class Organism : MonoBehaviour {
     public int x, y;
-    Brain brain;
+    public Brain brain;
     public Genome Genome;
     public int OrganismID;
 
@@ -59,7 +59,7 @@ public class Organism : MonoBehaviour {
     void OnMouseUp() {
         DrawBrain.Instance.drawBrain(brain);
         Grid.Instance.world.changeFocus(this);
-        print(brain.Neurons.Count);
+        print(brain.InterNeurons.Count);
         print(brain.numSynapses);
     }
 }

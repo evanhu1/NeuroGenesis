@@ -20,35 +20,35 @@ public class Genome {
     public Genome(Brain brain) {
         synapses = new List<Tuple<int, int, int, int, float, float>>();
         genes = new List<Gene>();
+        
+        foreach (SensoryNeuron sensoryNeuron in brain.SensoryNeurons) {
+            genes.Add(new Gene(sensoryNeuron));
+            foreach (Synapse s in sensoryNeuron.Synapses) {
+                synapses.Add(Tuple.Create(
+                    (int)((Neuron)s.PreSynapticNeuron).Type,
+                    ((Neuron)s.PreSynapticNeuron).NeuronID, 
+                    (int)s.PostSynapticNeuron.Type,
+                    s.PostSynapticNeuron.NeuronID, 
+                    s.FireProbability, 
+                    s.SynapticStrength));
+            }
+        }
 
-        foreach (InterNeuron neuron in brain.Neurons) {
+        foreach (InterNeuron neuron in brain.InterNeurons) {
             genes.Add(new Gene(neuron));
-            // foreach (Synapse s in neuron.Synapses) {
-            //     synapses.Add(Tuple.Create(
-            //         (int)((Neuron)s.PreSynapticNeuron).Type,
-            //         ((Neuron)s.PreSynapticNeuron).NeuronID, 
-            //         (int)s.PostSynapticNeuron.Type,
-            //         s.PostSynapticNeuron.NeuronID, 
-            //         s.FireProbability, 
-            //         s.SynapticStrength));
-            // }
-
-            foreach (SensoryNeuron sensoryNeuron in brain.SensoryNeurons) {
-                genes.Add(new Gene(sensoryNeuron));
-                // foreach (Synapse s in sensoryNeuron.Synapses) {
-                //     synapses.Add(Tuple.Create(
-                //         (int)((Neuron)s.PreSynapticNeuron).Type,
-                //         ((Neuron)s.PreSynapticNeuron).NeuronID, 
-                //         (int)s.PostSynapticNeuron.Type,
-                //         s.PostSynapticNeuron.NeuronID, 
-                //         s.FireProbability, 
-                //         s.SynapticStrength));
-                // }
+            foreach (Synapse s in neuron.Synapses) {
+                synapses.Add(Tuple.Create(
+                    (int)((Neuron)s.PreSynapticNeuron).Type,
+                    ((Neuron)s.PreSynapticNeuron).NeuronID, 
+                    (int)s.PostSynapticNeuron.Type,
+                    s.PostSynapticNeuron.NeuronID, 
+                    s.FireProbability, 
+                    s.SynapticStrength));
             }
-
-            foreach (ActionNeuron actionNeuron in brain.ActionNeurons) {
-                genes.Add(new Gene(actionNeuron));
-            }
+        }
+        
+        foreach (ActionNeuron actionNeuron in brain.ActionNeurons) {
+            genes.Add(new Gene(actionNeuron));
         }
     }
 
@@ -103,25 +103,25 @@ public class Genome {
             }
         }
         
-        // if (Random.value < mutationChance) mutateNeurons(Random.Range(1, (int)mutationMagnitude)); 
-        // if (Random.value < mutationChance) mutateSynapses(Random.Range(1, (int)mutationMagnitude)); 
-        //
-        // // Iterate through all synapses and use hashmap to connect the new neurons together accordingly
-        // foreach ((int preSynapticType, int preSynapticID, int postSynapticType, int postSynapticID, float fireChance,
-        //              float synapticStrength) in synapses) {
-        //     // postSynapticID needs to be modulated (modulo'd) because mutations generate a random int value for ID. 
-        //     int postSynapticNeuronID = (NeuronType)postSynapticType == NeuronType.InterNeuron
-        //         ? postSynapticID % interNeurons.Count
-        //         : postSynapticID % actionNeurons.Count;
-        //
-        //     if (!neuronMap.ContainsKey(Tuple.Create(preSynapticType, preSynapticID)) ||
-        //         !neuronMap.ContainsKey(Tuple.Create(postSynapticType, postSynapticNeuronID))) continue;
-        //     
-        //     IOutputNeuron preSynapticNeuron = (IOutputNeuron) neuronMap[Tuple.Create(preSynapticType, preSynapticID)];
-        //     Neuron postSynapticNeuron = neuronMap[Tuple.Create(postSynapticType, postSynapticNeuronID)];
-        //     
-        //     preSynapticNeuron.createSynapse(postSynapticNeuron, fireChance, synapticStrength);
-        // }
+        if (Random.value < mutationChance) mutateNeurons(Random.Range(1, (int)mutationMagnitude)); 
+        if (Random.value < mutationChance) mutateSynapses(Random.Range(1, (int)mutationMagnitude)); 
+        
+        // Iterate through all synapses and use hashmap to connect the new neurons together accordingly
+        foreach ((int preSynapticType, int preSynapticID, int postSynapticType, int postSynapticID, float fireChance,
+                     float synapticStrength) in synapses) {
+            // postSynapticID needs to be modulated (modulo'd) because mutations generate a random int value for ID. 
+            int postSynapticNeuronID = (NeuronType)postSynapticType == NeuronType.InterNeuron
+                ? postSynapticID % interNeurons.Count
+                : postSynapticID % actionNeurons.Count;
+        
+            if (!neuronMap.ContainsKey(Tuple.Create(preSynapticType, preSynapticID)) ||
+                !neuronMap.ContainsKey(Tuple.Create(postSynapticType, postSynapticNeuronID))) continue;
+            
+            IOutputNeuron preSynapticNeuron = (IOutputNeuron) neuronMap[Tuple.Create(preSynapticType, preSynapticID)];
+            Neuron postSynapticNeuron = neuronMap[Tuple.Create(postSynapticType, postSynapticNeuronID)];
+            
+            preSynapticNeuron.createSynapse(postSynapticNeuron, fireChance, synapticStrength);
+        }
 
         return new Brain(newOrganism, synapses.Count, interNeurons, sensoryNeurons, actionNeurons);
     }

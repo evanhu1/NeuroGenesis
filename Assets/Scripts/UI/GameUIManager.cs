@@ -4,7 +4,7 @@ using Button = UnityEngine.UI.Button;
 
 namespace UI {
     public class GameUIManager : MonoBehaviour {
-        public Button animateSingle, skipSingle, skipTen, scatterOrganisms, benchmarkEpoch;
+        public Button animateSingle, skipSingle, skipTen, scatterOrganisms, benchmarkEpoch, killUnfit;
         public World world;
         public TextMeshProUGUI epochLabel;
         public static GameUIManager Instance { get; private set; }
@@ -17,6 +17,7 @@ namespace UI {
             skipTen.onClick.AddListener(() => StartCoroutine(world.simulateEpochs(10, false)));
             scatterOrganisms.onClick.AddListener(() => world.scatterOrganisms());
             benchmarkEpoch.onClick.AddListener(() => print(world.benchmarkEpoch()));
+            killUnfit.onClick.AddListener(() => world.processSurvivingOrganisms());
         }
 
         // Update is called once per frame

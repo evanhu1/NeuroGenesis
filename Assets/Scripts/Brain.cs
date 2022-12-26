@@ -9,7 +9,7 @@ public class Brain {
     int numSensors = (int) SensoryReceptorType.NumTypes;
     int numNeurons;
     public int numSynapses;
-    public List<InterNeuron> Neurons;
+    public List<InterNeuron> InterNeurons;
     public List<SensoryNeuron> SensoryNeurons;
     public List<ActionNeuron> ActionNeurons;
     Organism organism;
@@ -21,22 +21,21 @@ public class Brain {
         this.numNeurons = numNeurons;
         this.numSynapses = numSynapses;
         this.organism = organism;
-        Neurons = new List<InterNeuron>();
+        InterNeurons = new List<InterNeuron>();
         SensoryNeurons = new List<SensoryNeuron>();
         ActionNeurons = new List<ActionNeuron>();
         generateSensoryNeurons();
+        generateInterNeurons();
         generateActionNeurons();
-        generateNeurons();
         generateSynapses();
-        // printBrain();
     }
 
-    public Brain(Organism organism, int numSynapses, List<InterNeuron> neurons, List<SensoryNeuron> sensoryNeurons, List<ActionNeuron> actionNeurons) {
+    public Brain(Organism organism, int numSynapses, List<InterNeuron> interNeurons, List<SensoryNeuron> sensoryNeurons, List<ActionNeuron> actionNeurons) {
         this.organism = organism;
         this.numSynapses = numSynapses;
-        numNeurons = neurons.Count;
+        numNeurons = interNeurons.Count;
         SensoryNeurons = sensoryNeurons;
-        Neurons = neurons;
+        InterNeurons = interNeurons;
         ActionNeurons = actionNeurons;
     }
 
@@ -55,21 +54,15 @@ public class Brain {
     /// If a duplicate synapse would be created, the operation is aborted.
     /// </summary>
     void createSynapse() {
-        int preNeuronIndex = Random.Range(0, Neurons.Count + numSensors);
-        IOutputNeuron preSynapticNeuron = preNeuronIndex < Neurons.Count
-            ? Neurons[preNeuronIndex]
-            : SensoryNeurons[preNeuronIndex - Neurons.Count];
-        int postNeuronIndex = Random.Range(0, Neurons.Count + numActions);
-        Neuron postSynapticNeuron = postNeuronIndex < Neurons.Count
-            ? Neurons[postNeuronIndex]
-            : ActionNeurons[postNeuronIndex - Neurons.Count];
+        int preNeuronIndex = Random.Range(0, InterNeurons.Count + numSensors);
+        IOutputNeuron preSynapticNeuron = preNeuronIndex < InterNeurons.Count
+            ? InterNeurons[preNeuronIndex]
+            : SensoryNeurons[preNeuronIndex - InterNeurons.Count];
+        int postNeuronIndex = Random.Range(0, InterNeurons.Count + numActions);
+        Neuron postSynapticNeuron = postNeuronIndex < InterNeurons.Count
+            ? InterNeurons[postNeuronIndex]
+            : ActionNeurons[postNeuronIndex - InterNeurons.Count];
         preSynapticNeuron.createSynapse(postSynapticNeuron, -1, -1);
-    }
-
-    void generateNeurons() {
-        for (int i = 0; i < numNeurons; i++) {
-            Neurons.Add(new InterNeuron(i));
-        }
     }
 
     void generateSensoryNeurons() {
@@ -77,6 +70,12 @@ public class Brain {
             SensoryNeurons.Add(
                 new SensoryNeuron(i, organism)
             );
+        }
+    }
+
+    void generateInterNeurons() {
+        for (int i = 0; i < numNeurons; i++) {
+            InterNeurons.Add(new InterNeuron(i));
         }
     }
 
@@ -104,7 +103,7 @@ public class Brain {
         }
         
         // Sum potentials for all neurons
-        foreach (InterNeuron neuron in Neurons) {
+        foreach (InterNeuron neuron in InterNeurons) {
             neuron.sumPotentials();
         }
         foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {
@@ -115,7 +114,7 @@ public class Brain {
         }
         
         // Initiate action potentials and fire synapses
-        foreach (InterNeuron neuron in Neurons) {
+        foreach (InterNeuron neuron in InterNeurons) {
             neuron.initiateActionPotential();
             neuron.incrementActionPotential();
         }
@@ -136,7 +135,7 @@ public class Brain {
         }
         
         // Decay neuron potentials
-        foreach (InterNeuron neuron in Neurons) {
+        foreach (InterNeuron neuron in InterNeurons) {
             neuron.decayPotential();
         }
         foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {

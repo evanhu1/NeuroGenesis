@@ -74,12 +74,12 @@ public class World : MonoBehaviour {
         // return organism.y > Grid.Instance.rows / 2;
         // return true;
         return (Grid.Instance.columns / 4) < organism.x 
-               && organism.x <= (Grid.Instance.columns * 3 / 4)
+               && organism.x < (Grid.Instance.columns * 3 / 4)
                && (Grid.Instance.rows / 4) < organism.y 
-               && organism.y <= (Grid.Instance.rows * 3 / 4);
+               && organism.y < (Grid.Instance.rows * 3 / 4);
     }
 
-    void processSurvivingOrganisms() {
+    public void processSurvivingOrganisms() {
         foreach (Organism organism in manager.organismList.ToList()) {
             bool isSurviving = survivalCheck(organism);
 
@@ -90,11 +90,11 @@ public class World : MonoBehaviour {
         }
         print(manager.organismList.Count);
 
-        // Fill in 80% of lacking population by cloning survivors, and the remaining 20% by creating new Organisms
+        // Fill in 90% of lacking population by cloning survivors, and the remaining 20% by creating new Organisms
         if (manager.organismList.Count > 0) {
             int originalCount = manager.organismList.Count;
             while (manager.organismList.Count < numOrganisms) {
-                if (Random.value < 0.8) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
+                if (Random.value < 0.9) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
                 else createOrganism(manager.organismList.Count, 0, 0);
             }
         }
@@ -107,13 +107,13 @@ public class World : MonoBehaviour {
     
     public IEnumerator simulateEpochs(int epochs, bool wait) {
         for (int epoch = 0; epoch < epochs; epoch++) {
-            processSurvivingOrganisms();
-
             scatterOrganisms();
             for (int i = 0; i < simulationStepsPerEpoch; i++) {
                 executeOrganismActions();
                 if (wait) yield return new WaitForSeconds(1.0f / simulationStepsPerSecond);
             }
+            
+            processSurvivingOrganisms();
         }
 
         CurrentEpoch += epochs;
@@ -121,13 +121,12 @@ public class World : MonoBehaviour {
     }
 
     void simulateEpoch() {
-        processSurvivingOrganisms();
-        
         scatterOrganisms();
         for (int i = 0; i < simulationStepsPerEpoch; i++) {
             executeOrganismActions();
         }
         
+        processSurvivingOrganisms();
         CurrentEpoch++;
         GameUIManager.Instance.epochLabel.text = "Epoch: " + CurrentEpoch;
     }
@@ -135,9 +134,11 @@ public class World : MonoBehaviour {
     // Places all existing organisms randomly on the grid
     public void scatterOrganisms() {
         foreach (Organism org in manager.organismList) {
-            int newX = Random.Range(0, Grid.Instance.columns);
-            int newY = Random.Range(0, Grid.Instance.rows);
-            org.move(newX, newY);
+            do {
+                int newX = Random.Range(0, Grid.Instance.columns);
+                int newY = Random.Range(0, Grid.Instance.rows);
+                org.move(newX, newY);
+            } while (survivalCheck(org));
         }
     }
 

@@ -43,14 +43,14 @@ namespace UI {
         
         void drawInterNeurons(Brain brain) {
             Vector3 startPos = transform.position + new Vector3(neuronWidth, 0);
-            int numColumns = (brain.Neurons.Count + neuronsPerColumn - 1) / neuronsPerColumn;
+            int numColumns = (brain.InterNeurons.Count + neuronsPerColumn - 1) / neuronsPerColumn;
 
             // Iterate once for each column
             for (int i = 0; i < numColumns; i++) {
-                for (int j = 0; j < Math.Min(brain.Neurons.Count - i * neuronsPerColumn, neuronsPerColumn); j++) {
+                for (int j = 0; j < Math.Min(brain.InterNeurons.Count - i * neuronsPerColumn, neuronsPerColumn); j++) {
                     NeuronSprite n = Instantiate(neuron, startPos + new Vector3(i * (neuronWidth), -j *
                         (neuronHeight)), Quaternion.identity);
-                    n.neuron = brain.Neurons[i * neuronsPerColumn + j];
+                    n.neuron = brain.InterNeurons[i * neuronsPerColumn + j];
                     n.canvas = canvas;
                     clones.Add(n.gameObject);
                 }
@@ -58,7 +58,7 @@ namespace UI {
         }
         
         void drawActionNeurons(Brain brain) {
-            int numInterNeuronColumns = (brain.Neurons.Count + neuronsPerColumn - 1) / neuronsPerColumn;
+            int numInterNeuronColumns = (brain.InterNeurons.Count + neuronsPerColumn - 1) / neuronsPerColumn;
             // Offset SensoryNeuron column, and InterNeuron columns
             Vector3 startPos = transform.position + new Vector3((1 + numInterNeuronColumns) * neuronWidth, 0);
 
@@ -78,7 +78,7 @@ namespace UI {
                 return transform.position + new Vector3((1 + NeuronID / neuronsPerColumn) * (neuronWidth), 
                     -(NeuronID % neuronsPerColumn) * neuronHeight);
             } else {
-                int numInterNeuronColumns = (brain.Neurons.Count + neuronsPerColumn - 1) / neuronsPerColumn;
+                int numInterNeuronColumns = (brain.InterNeurons.Count + neuronsPerColumn - 1) / neuronsPerColumn;
                 return transform.position + new Vector3((1 + numInterNeuronColumns) * neuronWidth,
                     -NeuronID * neuronHeight);
             }
@@ -102,7 +102,7 @@ namespace UI {
             foreach (SensoryNeuron inputNeuron in brain.SensoryNeurons) {
                 drawSynapse(inputNeuron, brain);
             }
-            foreach (InterNeuron inputNeuron in brain.Neurons) {
+            foreach (InterNeuron inputNeuron in brain.InterNeurons) {
                 drawSynapse(inputNeuron, brain);
             }
         }
