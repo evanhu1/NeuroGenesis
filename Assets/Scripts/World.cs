@@ -49,6 +49,10 @@ public class World : MonoBehaviour {
         manager.addOrganism(newOrganism, x, y);
     }
 
+    /// <summary>
+    /// Instantiates new Organism object with a Brain inherited from organism PARENT; the brain contains mutations of its own.
+    /// </summary>
+    /// <param name="parent"></param>
     void spawnOffspring(Organism parent) {
         int x = parent.x;
         int y = parent.y;
@@ -56,6 +60,8 @@ public class World : MonoBehaviour {
         Organism child = Instantiate(manager.organism, pos, Quaternion.identity);
         child.InitWithBrain(manager.organismList.Count, x, y,
             parent.Genome.constructBrain(child, mutationChance, mutationMagnitude));
+        // child.InitWithBrain(manager.organismList.Count, x, y,
+        //     parent.brain.replicateAndMutate(child, mutationChance, mutationMagnitude));
         manager.addOrganism(child, x, y);
     }
 
@@ -71,15 +77,15 @@ public class World : MonoBehaviour {
     }
 
     public bool survivalCheck(Organism organism) {
-        // return organism.y > Grid.Instance.rows / 2;
-        // return true;
+        // return organism.y == Grid.Instance.rows - 1 && organism.x == Grid.Instance.columns - 1;
+        return organism.y > Grid.Instance.rows / 2;
         return (Grid.Instance.columns / 4) < organism.x 
                && organism.x < (Grid.Instance.columns * 3 / 4)
                && (Grid.Instance.rows / 4) < organism.y 
                && organism.y < (Grid.Instance.rows * 3 / 4);
     }
 
-    public void processSurvivingOrganisms() {
+    public int processSurvivingOrganisms() {
         foreach (Organism organism in manager.organismList.ToList()) {
             bool isSurviving = survivalCheck(organism);
 
@@ -88,21 +94,22 @@ public class World : MonoBehaviour {
                 killOrganism(organism);
             }
         }
-        print(manager.organismList.Count);
+        int survivingCount = manager.organismList.Count;
 
-        // Fill in 90% of lacking population by cloning survivors, and the remaining 20% by creating new Organisms
+        // Fill in 90% of missing population by cloning survivors, and the remaining 10% by creating new Organisms.
+        // If no survivors then just creates a new generation of organisms.
         if (manager.organismList.Count > 0) {
             int originalCount = manager.organismList.Count;
-            while (manager.organismList.Count < numOrganisms) {
-                if (Random.value < 0.9) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
-                else createOrganism(manager.organismList.Count, 0, 0);
-            }
+            for (int i = 0; i < (int)(0.9f * (numOrganisms - originalCount)); i++) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
+            for (int i = 0; i < numOrganisms - manager.organismList.Count; i++) createOrganism(manager.organismList.Count, 0, 0);
         }
         else {
             for (int i = 0; i < numOrganisms; i++) {
                 createOrganism(i, 0, 0);
             }
         }
+
+        return survivingCount;
     }
     
     public IEnumerator simulateEpochs(int epochs, bool wait) {
@@ -113,11 +120,12 @@ public class World : MonoBehaviour {
                 if (wait) yield return new WaitForSeconds(1.0f / simulationStepsPerSecond);
             }
             
-            processSurvivingOrganisms();
+            int survivingCount = processSurvivingOrganisms();
+            CurrentEpoch++;
+            GameUIManager.Instance.epochLabel.text = "Epoch: " + CurrentEpoch;
+            GameUIManager.Instance.survivingCount.text = survivingCount + " Surviving Organisms";
+            yield return new WaitForEndOfFrame();
         }
-
-        CurrentEpoch += epochs;
-        GameUIManager.Instance.epochLabel.text = "Epoch: " + CurrentEpoch;
     }
 
     void simulateEpoch() {
@@ -126,9 +134,10 @@ public class World : MonoBehaviour {
             executeOrganismActions();
         }
         
-        processSurvivingOrganisms();
+        int survivingCount = processSurvivingOrganisms();
         CurrentEpoch++;
         GameUIManager.Instance.epochLabel.text = "Epoch: " + CurrentEpoch;
+        GameUIManager.Instance.survivingCount.text = survivingCount + " Surviving Organisms";
     }
     
     // Places all existing organisms randomly on the grid
@@ -142,18 +151,29 @@ public class World : MonoBehaviour {
         }
     }
 
+    /// Finds the average normalized time of 10 epochs
     public double benchmarkEpoch() {
+        double average = 0;
         Stopwatch sw = new Stopwatch();
-        sw.Start();
-        simulateEpoch();
-        sw.Stop();
-        return sw.ElapsedMilliseconds * 1000.0 / (simulationStepsPerEpoch * (numNeurons + numSynapses) * numOrganisms);
+        for (int i = 0; i < 10; i++) {
+            sw.Start();
+            simulateEpoch();
+            sw.Stop();
+            average += sw.ElapsedMilliseconds * 1000.0 / (simulationStepsPerEpoch * (numNeurons + numSynapses) * numOrganisms);
+        }
+
+        return average / 10.0;
     }
     
     // Update is called once per frame.
     void Update() {
         if (Input.GetKeyUp("n")) {
             executeOrganismActions();
+        }
+        if (Input.GetKeyUp("t")) {
+            foreach (Organism org in manager.organismList.ToList()) {
+                spawnOffspring(org);
+            }
         }
     }
 }

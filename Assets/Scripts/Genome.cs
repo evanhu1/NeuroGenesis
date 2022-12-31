@@ -123,7 +123,7 @@ public class Genome {
             preSynapticNeuron.createSynapse(postSynapticNeuron, fireChance, synapticStrength);
         }
 
-        return new Brain(newOrganism, synapses.Count, interNeurons, sensoryNeurons, actionNeurons);
+        return new Brain(newOrganism, synapses.Count, sensoryNeurons, interNeurons, actionNeurons);
     }
     void mutateNeurons(int mutationMagnitude) {
         // 0 = insertion, 1 = deletion, 2 = substitution 

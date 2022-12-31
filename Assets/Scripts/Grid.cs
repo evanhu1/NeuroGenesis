@@ -20,7 +20,7 @@ public class Grid : MonoBehaviour {
         }
 
         camera.transform.position = (Vector3) getCenter() + new Vector3(0, 0, -10);
-        camera.orthographicSize = rows / 2f;
+        camera.orthographicSize = rows / 2f * 1.5f;
     }
 
     public Vector2 getPosition(int x, int y) {
