@@ -7,7 +7,6 @@ using UnityEngine;
 public class Organism : MonoBehaviour {
     public int x, y;
     public Brain brain;
-    public Genome Genome;
     public int OrganismID;
 
     public void Init(int id, int newX, int newY, int numNeurons, int numSynapses) {
@@ -15,7 +14,6 @@ public class Organism : MonoBehaviour {
         y = newY;
         OrganismID = id;
         brain = new Brain(this, numNeurons, numSynapses);
-        // Genome = new Genome(brain);
     }
     
     public void InitWithBrain(int id, int newX, int newY, Brain b) {
@@ -23,7 +21,6 @@ public class Organism : MonoBehaviour {
         x = newX;
         y = newY;
         brain = b;
-        // Genome = new Genome(brain);
     }
 
     public void simulateStep() {
