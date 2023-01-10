@@ -214,19 +214,106 @@ public class Brain {
         Dictionary<Neuron, Neuron> neuronMap = new Dictionary<Neuron, Neuron>();
         
         foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {
-            newSensoryNeurons.Add((SensoryNeuron) replicateBrainDFS(sensoryNeuron, neuronMap, newOrganism));
+            SensoryNeuron newNeuron = new SensoryNeuron(
+                sensoryNeuron.NeuronID,
+                sensoryNeuron.actionPotentialThreshold,
+                sensoryNeuron.restingPotential,
+                sensoryNeuron.actionPotentialLength,
+                sensoryNeuron.PotentialDecayRate,
+                new List<Synapse>(),
+                new SensoryReceptor(sensoryNeuron.Receptor.Type, newOrganism));
+            neuronMap[sensoryNeuron] = newNeuron;
+            newSensoryNeurons.Add(newNeuron);
         }
 
         foreach (InterNeuron neuron in InterNeurons) {
-            newInterNeurons.Add((InterNeuron) replicateBrainDFS(neuron, neuronMap, newOrganism));
+            InterNeuron newNeuron = new InterNeuron(
+                neuron.NeuronID,
+                neuron.actionPotentialThreshold,
+                neuron.restingPotential,
+                neuron.actionPotentialLength,
+                neuron.PotentialDecayRate,
+                new List<Synapse>());
+            neuronMap[neuron] = newNeuron;
+            newInterNeurons.Add(newNeuron);
         }
         
         foreach (ActionNeuron actionNeuron in ActionNeurons) {
-            newActionNeurons.Add((ActionNeuron) replicateBrainDFS(actionNeuron, neuronMap, newOrganism));
+            ActionNeuron newNeuron = new ActionNeuron(
+                actionNeuron.NeuronID,
+                actionNeuron.actionPotentialThreshold,
+                actionNeuron.restingPotential,
+                actionNeuron.actionPotentialLength,
+                actionNeuron.PotentialDecayRate,
+                actionNeuron.ActionType);
+            neuronMap[actionNeuron] = newNeuron;
+            newActionNeurons.Add(newNeuron);
         }
         
+        // Create all synapses for new brain
+        foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {
+            foreach (Synapse synapse in sensoryNeuron.Synapses) {
+                ((IOutputNeuron)neuronMap[(Neuron)synapse.PreSynapticNeuron]).createSynapse(neuronMap[synapse.PostSynapticNeuron], synapse.FireProbability, synapse.SynapticStrength);
+            }
+        }
+        
+        foreach (InterNeuron interNeuron in InterNeurons) {
+            foreach (Synapse synapse in interNeuron.Synapses) {
+                ((IOutputNeuron)neuronMap[(Neuron)synapse.PreSynapticNeuron]).createSynapse(neuronMap[synapse.PostSynapticNeuron], synapse.FireProbability, synapse.SynapticStrength);
+            }
+        }
+
         Brain newBrain = new Brain(newOrganism, numSynapses, newSensoryNeurons, newInterNeurons, newActionNeurons);
         
+        mutateNeurons((int) mutationMagnitude, newBrain);
+        mutateSynapses((int) mutationMagnitude, newBrain);
+
         return newBrain;
+    }
+    
+    void mutateNeurons(int mutationMagnitude, Brain brain) {
+        List<InterNeuron> interNeurons = brain.InterNeurons;
+
+        // 0 = insertion, 1 = deletion, 2 = substitution 
+        for (int i = 0; i < mutationMagnitude; i++) {
+            int mutationType = Random.Range(0, 3);
+            switch (mutationType) {
+                case 0:
+                    interNeurons.Add(
+                        new InterNeuron(interNeurons[^1].NeuronID + 1));
+                    break;
+                case 1:
+                    if (interNeurons.Count == 0) break;
+                    interNeurons.RemoveAt(Random.Range(0, interNeurons.Count));
+                    break;
+                case 2:
+                    if (interNeurons.Count == 0) break;
+                    int randomIndex = Random.Range(0, interNeurons.Count);
+                    interNeurons[randomIndex] =
+                        new InterNeuron(interNeurons[randomIndex].NeuronID);
+                    break;
+            }
+        }
+    }
+    
+    void mutateSynapses(int mutationMagnitude, Brain brain) {
+        // 0 = insertion, 1 = deletion
+        for (int i = 0; i < mutationMagnitude; i++) {
+            // 0 = Sensory Neuron, 1 = Interneuron
+            int neuronTypeToMutate = Random.Range(0, 2);
+            IOutputNeuron neuronToMutate = (neuronTypeToMutate == 0) 
+                ? brain.SensoryNeurons[Random.Range(0, brain.SensoryNeurons.Count)]
+                : brain.InterNeurons[Random.Range(0, brain.InterNeurons.Count)];
+            int mutationType = Random.Range(0, 2);
+            switch (mutationType) {
+                case 0:
+                    brain.createSynapse();
+                    break;
+                case 1:
+                    if (neuronToMutate.Synapses.Count == 0) break;
+                    neuronToMutate.Synapses.RemoveAt(Random.Range(0, neuronToMutate.Synapses.Count));
+                    break;
+            }
+        }
     }
 }

@@ -58,10 +58,10 @@ public class World : MonoBehaviour {
         int y = parent.y;
         Vector3 pos = grid.getPosition(x, y);
         Organism child = Instantiate(manager.organism, pos, Quaternion.identity);
-        child.InitWithBrain(manager.organismList.Count, x, y,
-            parent.Genome.constructBrain(child, mutationChance, mutationMagnitude));
         // child.InitWithBrain(manager.organismList.Count, x, y,
-        //     parent.brain.replicateAndMutate(child, mutationChance, mutationMagnitude));
+        //     parent.Genome.constructBrain(child, mutationChance, mutationMagnitude));
+        child.InitWithBrain(manager.organismList.Count, x, y,
+            parent.brain.replicateAndMutate(child, mutationChance, mutationMagnitude));
         manager.addOrganism(child, x, y);
     }
 
@@ -96,11 +96,11 @@ public class World : MonoBehaviour {
         }
         int survivingCount = manager.organismList.Count;
 
-        // Fill in 90% of missing population by cloning survivors, and the remaining 10% by creating new Organisms.
+        // Fill in 80% of missing population by cloning survivors, and the remaining 10% by creating new Organisms.
         // If no survivors then just creates a new generation of organisms.
         if (manager.organismList.Count > 0) {
             int originalCount = manager.organismList.Count;
-            for (int i = 0; i < (int)(0.9f * (numOrganisms - originalCount)); i++) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
+            for (int i = 0; i < (int)(0.8f * (numOrganisms - originalCount)); i++) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
             for (int i = 0; i < numOrganisms - manager.organismList.Count; i++) createOrganism(manager.organismList.Count, 0, 0);
         }
         else {
