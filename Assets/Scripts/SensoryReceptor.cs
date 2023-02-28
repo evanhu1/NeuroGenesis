@@ -8,18 +8,9 @@ public class SensoryReceptor {
     public SensoryReceptorType Type;
     const int VisionDepth = 3;
     float value;
-    // Sensory input values get multiplied by this sensitivity factor during transduction
-    public float sensorySensitivity;
 
     public SensoryReceptor(SensoryReceptorType type, Organism organism) {
         this.organism = organism;
-        sensorySensitivity = Random.Range(0f, 4f);
-        Type = type;
-    }
-    
-    public SensoryReceptor(SensoryReceptorType type, Organism organism, float sensorySensitivity) {
-        this.organism = organism;
-        this.sensorySensitivity = sensorySensitivity;
         Type = type;
     }
     
@@ -50,6 +41,6 @@ public class SensoryReceptor {
     }
 
     public float getValue() {
-        return sensorySensitivity * value;
+        return value;
     }
 }

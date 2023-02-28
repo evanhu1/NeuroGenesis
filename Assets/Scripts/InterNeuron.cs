@@ -5,7 +5,7 @@ using UnityEngine;
 public class InterNeuron : Neuron, IOutputNeuron {
     public List<Synapse> Synapses { get; set; }
 
-    public InterNeuron(int NeuronID) : base(NeuronID, NeuronType.InterNeuron) {
+    public InterNeuron(int NeuronID, bool isInverted = false) : base(NeuronID, NeuronType.InterNeuron, isInverted) {
         Synapses = new List<Synapse>();
     }
     
@@ -15,14 +15,16 @@ public class InterNeuron : Neuron, IOutputNeuron {
         float restingPotential,
         int actionPotentialTime,
         float potentialDecayRate,
-        List<Synapse> synapses
+        List<Synapse> synapses,
+        bool isInverted = false
     ) : base(
         NeuronID,
         actionPotentialThreshold,
         restingPotential,
         actionPotentialTime,
         potentialDecayRate,
-        NeuronType.InterNeuron
+        NeuronType.InterNeuron,
+        isInverted
     ) {
         Synapses = synapses;
     }

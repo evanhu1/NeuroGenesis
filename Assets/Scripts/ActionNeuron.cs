@@ -12,19 +12,21 @@ public class ActionNeuron : Neuron {
         float restingPotential,
         int actionPotentialLength,
         float potentialDecayRate,
-        ActionType actionType
+        ActionType actionType,
+        bool isInverted = false
     ) : base(
         NeuronID,
         actionPotentialThreshold,
         restingPotential,
         actionPotentialLength,
         potentialDecayRate,
-        NeuronType.ActionNeuron
+        NeuronType.ActionNeuron,
+        isInverted
     ) {
         ActionType = actionType;
     }
 
-    public ActionNeuron(int NeuronID, ActionType actionType) : base(NeuronID, NeuronType.ActionNeuron) {
+    public ActionNeuron(int NeuronID, ActionType actionType, bool isInverted = false) : base(NeuronID, NeuronType.ActionNeuron, isInverted) {
         ActionType = actionType;
     }
 

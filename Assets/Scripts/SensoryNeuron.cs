@@ -1,14 +1,17 @@
 using System.Collections.Generic;
 using Definitions;
-using UnityEngine;
 
 public class SensoryNeuron : Neuron, IOutputNeuron {
     public SensoryReceptor Receptor;
     public List<Synapse> Synapses { get; set; }
 
-    public SensoryNeuron(int NeuronID, Organism organism) : base(NeuronID, NeuronType.SensoryNeuron) {
+    public SensoryNeuron(int NeuronID, Organism organism) : base(NeuronID, NeuronType.SensoryNeuron, false) {
         Synapses = new List<Synapse>();
         Receptor = new SensoryReceptor((SensoryReceptorType) NeuronID, organism);
+        actionPotentialLength = 0;
+        restingPotential = 0;
+        potential = 0;
+        actionPotentialThreshold = 0;
     }
 
     public SensoryNeuron(
@@ -25,7 +28,8 @@ public class SensoryNeuron : Neuron, IOutputNeuron {
         restingPotential,
         actionPotentialTime,
         potentialDecayRate,
-        NeuronType.SensoryNeuron
+        NeuronType.SensoryNeuron,
+        false
     ) {
         Synapses = synapses;
         Receptor = receptor;
@@ -37,8 +41,11 @@ public class SensoryNeuron : Neuron, IOutputNeuron {
         }
     }
 
-    public void updateReceptor() {
+    public override void sumPotentials() {
         Receptor.updateValue();
-        incomingCurrent = Receptor.getValue();
+        potential += Receptor.getValue();
+        foreach (Synapse synapse in Synapses) {
+            synapse.SynapticStrength = potential;
+        }
     }
 }

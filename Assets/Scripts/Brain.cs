@@ -14,6 +14,8 @@ public class Brain {
     public List<SensoryNeuron> SensoryNeurons;
     public List<ActionNeuron> ActionNeurons;
     Organism organism;
+    
+    float invertedNeuronRate = 0.05f;
 
     public Brain(Organism organism, int numNeurons, int numSynapses) {
         Assert.IsTrue(numSynapses <=
@@ -63,7 +65,7 @@ public class Brain {
         Neuron postSynapticNeuron = postNeuronIndex < InterNeurons.Count
             ? InterNeurons[postNeuronIndex]
             : ActionNeurons[postNeuronIndex - InterNeurons.Count];
-        preSynapticNeuron.createSynapse(postSynapticNeuron, -1, -1);
+        preSynapticNeuron.createSynapse(postSynapticNeuron, -1);
     }
 
     void generateSensoryNeurons() {
@@ -76,7 +78,7 @@ public class Brain {
 
     void generateInterNeurons() {
         for (int i = 0; i < numNeurons; i++) {
-            InterNeurons.Add(new InterNeuron(i));
+            InterNeurons.Add(new InterNeuron(i, Random.value < invertedNeuronRate));
         }
     }
 
@@ -89,45 +91,24 @@ public class Brain {
     }
 
     // Simulates one time step. Each time step the following occurs in order:
-    // 1. Sensory receptors are evaluated
-    // 2. All potential summations are computed
-    // 3. Action potentials are initiated
-    // 4. Axon neurotransmitters are released
-    // 5. Actions are taken if action neurons experience action potential
-    // 6. Decay/propagation is incremented
+    // 1. All potential summations are computed
+    // 2. Action potentials are initiated
+    // 3. Actions are taken if action neurons experience action potential
+    // 4. Decay/propagation is incremented
     public bool[] simulateStep() {
         bool[] actionOutcomes = new bool[numActions];
+        IEnumerable<Neuron> allNeurons = InterNeurons.Concat<Neuron>(SensoryNeurons).Concat(ActionNeurons);
 
-        // Update all sensory receptors
-        foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {
-            sensoryNeuron.updateReceptor();
-        }
-        
         // Sum potentials for all neurons
-        foreach (InterNeuron neuron in InterNeurons) {
+        foreach (Neuron neuron in allNeurons) {
             neuron.sumPotentials();
-        }
-        foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {
-            sensoryNeuron.sumPotentials();
-        }
-        foreach (ActionNeuron actionNeuron in ActionNeurons) {
-            actionNeuron.sumPotentials();
         }
         
         // Initiate action potentials and fire synapses
-        foreach (InterNeuron neuron in InterNeurons) {
-            neuron.initiateActionPotential();
-            neuron.incrementActionPotential();
+        foreach (Neuron neuron in allNeurons) {
+            neuron.actionPotential();
         }
-        foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {
-            sensoryNeuron.initiateActionPotential();
-            sensoryNeuron.incrementActionPotential();
-        }
-        foreach (ActionNeuron actionNeuron in ActionNeurons) {
-            actionNeuron.initiateActionPotential();
-            actionNeuron.incrementActionPotential();
-        }
-        
+
         // Detect action signals
         foreach (ActionNeuron actionNeuron in ActionNeurons) {
             if (actionNeuron.IsActive) {
@@ -136,20 +117,17 @@ public class Brain {
         }
         
         // Decay neuron potentials
-        foreach (InterNeuron neuron in InterNeurons) {
+        foreach (Neuron neuron in allNeurons) {
             neuron.decayPotential();
-        }
-        foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {
-            sensoryNeuron.decayPotential();
-        }
-        foreach (ActionNeuron actionNeuron in ActionNeurons) {
-            actionNeuron.decayPotential();
         }
 
         return actionOutcomes;
     }
     
-    public Brain replicateAndMutate(Organism newOrganism, float mutationChance, float mutationMagnitude) {
+    /// <summary>
+    /// Deep copies this Brain instance and mutates the Neurons and Synapses. Returns the new Brain object.
+    /// </summary>
+    public Brain copyAndMutate(Organism newOrganism, float mutationChance, float mutationMagnitude) {
         List<SensoryNeuron> newSensoryNeurons = new List<SensoryNeuron>();
         List<InterNeuron> newInterNeurons = new List<InterNeuron>();
         List<ActionNeuron> newActionNeurons = new List<ActionNeuron>();
@@ -191,24 +169,26 @@ public class Brain {
             neuronMap[actionNeuron] = newNeuron;
             newActionNeurons.Add(newNeuron);
         }
-        
-        // Create all synapses for new brain
-        foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {
-            foreach (Synapse synapse in sensoryNeuron.Synapses) {
-                ((IOutputNeuron)neuronMap[(Neuron)synapse.PreSynapticNeuron]).createSynapse(neuronMap[synapse.PostSynapticNeuron], synapse.FireProbability, synapse.SynapticStrength);
-            }
-        }
-        
-        foreach (InterNeuron interNeuron in InterNeurons) {
-            foreach (Synapse synapse in interNeuron.Synapses) {
-                ((IOutputNeuron)neuronMap[(Neuron)synapse.PreSynapticNeuron]).createSynapse(neuronMap[synapse.PostSynapticNeuron], synapse.FireProbability, synapse.SynapticStrength);
-            }
-        }
 
         Brain newBrain = new Brain(newOrganism, numSynapses, newSensoryNeurons, newInterNeurons, newActionNeurons);
         
         mutateNeurons((int) mutationMagnitude, newBrain);
         mutateSynapses((int) mutationMagnitude, newBrain);
+        
+        // Copies all synapses in new brain
+        foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {
+            foreach (Synapse synapse in sensoryNeuron.Synapses) {
+                if (neuronMap.ContainsKey(synapse.PostSynapticNeuron))
+                    ((IOutputNeuron)neuronMap[(Neuron)synapse.PreSynapticNeuron]).createSynapse(neuronMap[synapse.PostSynapticNeuron], synapse.SynapticStrength);
+            }
+        }
+        
+        foreach (InterNeuron interNeuron in InterNeurons) {
+            foreach (Synapse synapse in interNeuron.Synapses) {
+                if (neuronMap.ContainsKey(synapse.PostSynapticNeuron))
+                    ((IOutputNeuron)neuronMap[(Neuron)synapse.PreSynapticNeuron]).createSynapse(neuronMap[synapse.PostSynapticNeuron], synapse.SynapticStrength);
+            }
+        }
 
         return newBrain;
     }
@@ -222,17 +202,30 @@ public class Brain {
             switch (mutationType) {
                 case 0:
                     interNeurons.Add(
-                        new InterNeuron(interNeurons[^1].NeuronID + 1));
+                        new InterNeuron(interNeurons.Count == 0 ? 0 : interNeurons[^1].NeuronID + 1, Random.value < invertedNeuronRate));
                     break;
                 case 1:
                     if (interNeurons.Count == 0) break;
-                    interNeurons.RemoveAt(Random.Range(0, interNeurons.Count));
+                    int randIndex = Random.Range(0, interNeurons.Count);
+                    interNeurons.RemoveAt(randIndex);
+                    // Shifting subsequent neuronID's to account for deletion
+                    // for (int j = randIndex; j < interNeurons.Count; j++) {
+                    //     interNeurons[j].NeuronID--;
+                    // }
                     break;
                 case 2:
                     if (interNeurons.Count == 0) break;
                     int randomIndex = Random.Range(0, interNeurons.Count);
-                    interNeurons[randomIndex] =
-                        new InterNeuron(interNeurons[randomIndex].NeuronID);
+
+                    // Substitute random InterNeuron with new InterNeuron while preserving existing Synapses
+                    List<Synapse> oldSynapses = interNeurons[randomIndex].Synapses;
+                    InterNeuron newInter = new InterNeuron(interNeurons[randomIndex].NeuronID, Random.value < invertedNeuronRate);
+                    foreach (Synapse s in oldSynapses) {
+                        s.PreSynapticNeuron = newInter;
+                    }
+
+                    newInter.Synapses = oldSynapses;
+                    interNeurons[randomIndex] = newInter;
                     break;
             }
         }
@@ -240,10 +233,12 @@ public class Brain {
     
     void mutateSynapses(int mutationMagnitude, Brain brain) {
         // 0 = insertion, 1 = deletion
+        if (brain.InterNeurons.Count == 0) return;
+        
         for (int i = 0; i < mutationMagnitude; i++) {
             // 0 = Sensory Neuron, 1 = Interneuron
             int neuronTypeToMutate = Random.Range(0, 2);
-            IOutputNeuron neuronToMutate = (neuronTypeToMutate == 0) 
+            IOutputNeuron neuronToMutate = (neuronTypeToMutate == 0)
                 ? brain.SensoryNeurons[Random.Range(0, brain.SensoryNeurons.Count)]
                 : brain.InterNeurons[Random.Range(0, brain.InterNeurons.Count)];
             int mutationType = Random.Range(0, 2);

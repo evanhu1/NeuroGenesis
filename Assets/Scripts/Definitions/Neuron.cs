@@ -8,8 +8,13 @@ namespace Definitions {
         public float restingPotential;
         public float potential;
         public float PotentialDecayRate;
-        public readonly int NeuronID;
+        public int NeuronID;
         
+        /// <summary>
+        /// Inverted Neurons fire action potentials when BELOW the activation threshold, and do nothing when ABOVE.
+        /// </summary>
+        public bool isInvertedNeuron;
+
         /// <summary>
         /// Number of simulation steps for an action potential to fire once initiated
         /// </summary>
@@ -33,7 +38,8 @@ namespace Definitions {
             float restingPotential,
             int actionPotentialLength,
             float potentialDecayRate,
-            NeuronType type
+            NeuronType type,
+            bool isInverted
         ) {
             this.NeuronID = NeuronID;
             this.actionPotentialThreshold = actionPotentialThreshold;
@@ -42,16 +48,16 @@ namespace Definitions {
             PotentialDecayRate = potentialDecayRate;
             potential = restingPotential;
             Type = type;
+            isInvertedNeuron = isInverted;
         }
         
         /// <summary>
         /// Initializes ID and type from input, and randomly sets all other parameters.
         /// </summary>
-        /// <param name="NeuronID"></param>
-        /// <param name="type"></param>
-        protected Neuron(int NeuronID, NeuronType type) : this() {
+        protected Neuron(int NeuronID, NeuronType type, bool isInverted) : this() {
             this.NeuronID = NeuronID;
             Type = type;
+            isInvertedNeuron = isInverted;
         }
 
         protected Neuron() {
@@ -72,11 +78,8 @@ namespace Definitions {
 
         public abstract void fireActionPotential();
 
-        public void initiateActionPotential() {
-            if (potential > actionPotentialThreshold && actionPotentialTime < 0) actionPotentialTime = 0;
-        }
-
-        public void incrementActionPotential() {
+        public void actionPotential() {
+            if ((isInvertedNeuron ^ (potential > actionPotentialThreshold)) && actionPotentialTime < 0) actionPotentialTime = 0;
             if (actionPotentialTime == actionPotentialLength) {
                 fireActionPotential();
                 actionPotentialTime = -1;
@@ -86,11 +89,11 @@ namespace Definitions {
             }
         }
 
-        public void sumPotentials() {
+        public virtual void sumPotentials() {
             potential += incomingCurrent;
             incomingCurrent = 0;
         }
 
-        public bool thresholdReached() => potential > actionPotentialThreshold;
+        public bool thresholdReached() => isInvertedNeuron ^ (potential > actionPotentialThreshold);
     }
 }

@@ -7,7 +7,7 @@ namespace Definitions {
     public interface IOutputNeuron {
         List<Synapse> Synapses { get; set; }
         
-        public void createSynapse(Neuron postSynapticNeuron, float fireProbability, float synapticStrength) {
+        public void createSynapse(Neuron postSynapticNeuron, float synapticStrength) {
             // Forbid autapses
             if (postSynapticNeuron == this) return;
             foreach (Synapse synapse in Synapses) {
@@ -16,7 +16,7 @@ namespace Definitions {
                 }
             }
 
-            Synapses.Add(new Synapse(this, postSynapticNeuron, fireProbability, synapticStrength));
+            Synapses.Add(new Synapse(this, postSynapticNeuron, synapticStrength));
         }
     }
 }

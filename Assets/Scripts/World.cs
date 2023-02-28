@@ -11,8 +11,8 @@ using Random = UnityEngine.Random;
 public class World : MonoBehaviour {
     public OrganismManagerScriptableObject manager;
     public Grid grid;
-    public int simulationStepsPerEpoch = 20;
-    public int simulationStepsPerSecond = 5;
+    public int stepsPerEpoch = 20;
+    public int stepsPerSecond = 5;
     public int numOrganisms = 5;
     public int numNeurons = 0;
     public int numSynapses = 10;
@@ -52,7 +52,6 @@ public class World : MonoBehaviour {
     /// <summary>
     /// Instantiates new Organism object with a Brain inherited from organism PARENT; the brain contains mutations of its own.
     /// </summary>
-    /// <param name="parent"></param>
     void spawnOffspring(Organism parent) {
         int x = parent.x;
         int y = parent.y;
@@ -61,7 +60,7 @@ public class World : MonoBehaviour {
         // child.InitWithBrain(manager.organismList.Count, x, y,
         //     parent.Genome.constructBrain(child, mutationChance, mutationMagnitude));
         child.InitWithBrain(manager.organismList.Count, x, y,
-            parent.brain.replicateAndMutate(child, mutationChance, mutationMagnitude));
+            parent.brain.copyAndMutate(child, mutationChance, mutationMagnitude));
         manager.addOrganism(child, x, y);
     }
 
@@ -76,13 +75,13 @@ public class World : MonoBehaviour {
         }
     }
 
-    public bool survivalCheck(Organism organism) {
+    static bool survivalCheck(Organism organism) {
         // return organism.y == Grid.Instance.rows - 1 && organism.x == Grid.Instance.columns - 1;
-        return organism.y > Grid.Instance.rows / 2;
-        return (Grid.Instance.columns / 4) < organism.x 
-               && organism.x < (Grid.Instance.columns * 3 / 4)
-               && (Grid.Instance.rows / 4) < organism.y 
-               && organism.y < (Grid.Instance.rows * 3 / 4);
+        // return organism.y > Grid.Instance.rows / 2;
+        return ((Grid.Instance.columns / 4) < organism.x
+                && organism.x < (Grid.Instance.columns * 3 / 4)
+                && (Grid.Instance.rows / 4) < organism.y
+                && organism.y < (Grid.Instance.rows * 3 / 4));
     }
 
     public int processSurvivingOrganisms() {
@@ -115,9 +114,9 @@ public class World : MonoBehaviour {
     public IEnumerator simulateEpochs(int epochs, bool wait) {
         for (int epoch = 0; epoch < epochs; epoch++) {
             scatterOrganisms();
-            for (int i = 0; i < simulationStepsPerEpoch; i++) {
+            for (int i = 0; i < stepsPerEpoch; i++) {
                 executeOrganismActions();
-                if (wait) yield return new WaitForSeconds(1.0f / simulationStepsPerSecond);
+                if (wait) yield return new WaitForSeconds(1.0f / stepsPerSecond);
             }
             
             int survivingCount = processSurvivingOrganisms();
@@ -130,7 +129,7 @@ public class World : MonoBehaviour {
 
     void simulateEpoch() {
         scatterOrganisms();
-        for (int i = 0; i < simulationStepsPerEpoch; i++) {
+        for (int i = 0; i < stepsPerEpoch; i++) {
             executeOrganismActions();
         }
         
@@ -140,7 +139,7 @@ public class World : MonoBehaviour {
         GameUIManager.Instance.survivingCount.text = survivingCount + " Surviving Organisms";
     }
     
-    // Places all existing organisms randomly on the grid
+    // Places all existing organisms randomly on the grid such that none meet survival criteria
     public void scatterOrganisms() {
         foreach (Organism org in manager.organismList) {
             do {
@@ -159,13 +158,12 @@ public class World : MonoBehaviour {
             sw.Start();
             simulateEpoch();
             sw.Stop();
-            average += sw.ElapsedMilliseconds * 1000.0 / (simulationStepsPerEpoch * (numNeurons + numSynapses) * numOrganisms);
+            average += sw.ElapsedMilliseconds * 1000.0 / (stepsPerEpoch * (numNeurons + numSynapses) * numOrganisms);
         }
 
         return average / 10.0;
     }
     
-    // Update is called once per frame.
     void Update() {
         if (Input.GetKeyUp("n")) {
             executeOrganismActions();
