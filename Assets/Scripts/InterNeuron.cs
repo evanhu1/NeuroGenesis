@@ -3,10 +3,10 @@ using Definitions;
 using UnityEngine;
 
 public class InterNeuron : Neuron, IOutputNeuron {
-    public List<Synapse> Synapses { get; set; }
+    public Dictionary<Neuron, float> Synapses { get; set; }
 
     public InterNeuron(int NeuronID, bool isInverted = false) : base(NeuronID, NeuronType.InterNeuron, isInverted) {
-        Synapses = new List<Synapse>();
+        Synapses = new Dictionary<Neuron, float>();
     }
     
     public InterNeuron(
@@ -15,7 +15,7 @@ public class InterNeuron : Neuron, IOutputNeuron {
         float restingPotential,
         int actionPotentialTime,
         float potentialDecayRate,
-        List<Synapse> synapses,
+        Dictionary<Neuron, float> synapses,
         bool isInverted = false
     ) : base(
         NeuronID,
@@ -30,8 +30,8 @@ public class InterNeuron : Neuron, IOutputNeuron {
     }
 
     public override void fireActionPotential() {
-        foreach (Synapse synapse in Synapses) {
-            synapse.fireSignal();
+        foreach (Neuron postSynapticNeuron in Synapses.Keys) {
+            postSynapticNeuron.incomingCurrent += Synapses[postSynapticNeuron];
         }
     }
 }

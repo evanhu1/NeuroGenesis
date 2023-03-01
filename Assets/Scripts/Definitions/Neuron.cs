@@ -9,6 +9,11 @@ namespace Definitions {
         public float potential;
         public float PotentialDecayRate;
         public int NeuronID;
+
+        /// <summary>
+        /// Keeps track of all Neurons that have a Synapse connected to this Neuron.
+        /// </summary>
+        public List<IOutputNeuron> parentNeurons;
         
         /// <summary>
         /// Inverted Neurons fire action potentials when BELOW the activation threshold, and do nothing when ABOVE.
@@ -49,6 +54,7 @@ namespace Definitions {
             potential = restingPotential;
             Type = type;
             isInvertedNeuron = isInverted;
+            parentNeurons = new List<IOutputNeuron>();
         }
         
         /// <summary>
@@ -67,6 +73,7 @@ namespace Definitions {
             potential = restingPotential;
             actionPotentialLength = Random.Range(0, 3);
             actionPotentialTime = -1;
+            parentNeurons = new List<IOutputNeuron>();
         }
     
         /// <summary>

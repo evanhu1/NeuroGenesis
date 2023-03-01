@@ -1,12 +1,13 @@
 using System.Collections.Generic;
+using System.Linq;
 using Definitions;
 
 public class SensoryNeuron : Neuron, IOutputNeuron {
     public SensoryReceptor Receptor;
-    public List<Synapse> Synapses { get; set; }
+    public Dictionary<Neuron, float> Synapses { get; set; }
 
     public SensoryNeuron(int NeuronID, Organism organism) : base(NeuronID, NeuronType.SensoryNeuron, false) {
-        Synapses = new List<Synapse>();
+        Synapses = new Dictionary<Neuron, float>();
         Receptor = new SensoryReceptor((SensoryReceptorType) NeuronID, organism);
         actionPotentialLength = 0;
         restingPotential = 0;
@@ -20,7 +21,7 @@ public class SensoryNeuron : Neuron, IOutputNeuron {
         float restingPotential,
         int actionPotentialTime,
         float potentialDecayRate,
-        List<Synapse> synapses,
+        Dictionary<Neuron, float> synapses,
         SensoryReceptor receptor
     ) : base(
         NeuronID,
@@ -36,16 +37,13 @@ public class SensoryNeuron : Neuron, IOutputNeuron {
     }
     
     public override void fireActionPotential() {
-        foreach (Synapse synapse in Synapses) {
-            synapse.fireSignal();
+        foreach (Neuron postSynapticNeuron in Synapses.Keys) {
+            postSynapticNeuron.incomingCurrent += potential * Synapses[postSynapticNeuron];
         }
     }
 
     public override void sumPotentials() {
         Receptor.updateValue();
         potential += Receptor.getValue();
-        foreach (Synapse synapse in Synapses) {
-            synapse.SynapticStrength = potential;
-        }
     }
 }

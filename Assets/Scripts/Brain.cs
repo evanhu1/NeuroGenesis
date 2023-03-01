@@ -140,7 +140,7 @@ public class Brain {
                 sensoryNeuron.restingPotential,
                 sensoryNeuron.actionPotentialLength,
                 sensoryNeuron.PotentialDecayRate,
-                new List<Synapse>(),
+                new Dictionary<Neuron, float>(),
                 new SensoryReceptor(sensoryNeuron.Receptor.Type, newOrganism));
             neuronMap[sensoryNeuron] = newNeuron;
             newSensoryNeurons.Add(newNeuron);
@@ -153,7 +153,7 @@ public class Brain {
                 neuron.restingPotential,
                 neuron.actionPotentialLength,
                 neuron.PotentialDecayRate,
-                new List<Synapse>());
+                new Dictionary<Neuron, float>());
             neuronMap[neuron] = newNeuron;
             newInterNeurons.Add(newNeuron);
         }
@@ -177,16 +177,16 @@ public class Brain {
         
         // Copies all synapses in new brain
         foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {
-            foreach (Synapse synapse in sensoryNeuron.Synapses) {
-                if (neuronMap.ContainsKey(synapse.PostSynapticNeuron))
-                    ((IOutputNeuron)neuronMap[(Neuron)synapse.PreSynapticNeuron]).createSynapse(neuronMap[synapse.PostSynapticNeuron], synapse.SynapticStrength);
+            foreach ((Neuron postSynapticNeuron, float synapticStrength) in sensoryNeuron.Synapses) {
+                if (neuronMap.ContainsKey(postSynapticNeuron))
+                    ((IOutputNeuron)neuronMap[sensoryNeuron]).createSynapse(neuronMap[postSynapticNeuron], synapticStrength);
             }
         }
         
         foreach (InterNeuron interNeuron in InterNeurons) {
-            foreach (Synapse synapse in interNeuron.Synapses) {
-                if (neuronMap.ContainsKey(synapse.PostSynapticNeuron))
-                    ((IOutputNeuron)neuronMap[(Neuron)synapse.PreSynapticNeuron]).createSynapse(neuronMap[synapse.PostSynapticNeuron], synapse.SynapticStrength);
+            foreach ((Neuron postSynapticNeuron, float synapticStrength) in interNeuron.Synapses) {
+                if (neuronMap.ContainsKey(postSynapticNeuron))
+                    ((IOutputNeuron)neuronMap[interNeuron]).createSynapse(neuronMap[postSynapticNeuron], synapticStrength);
             }
         }
 
@@ -207,6 +207,9 @@ public class Brain {
                 case 1:
                     if (interNeurons.Count == 0) break;
                     int randIndex = Random.Range(0, interNeurons.Count);
+                    foreach (IOutputNeuron parent in interNeurons[randIndex].parentNeurons) {
+                        parent.Synapses.Remove(interNeurons[randIndex]);
+                    }
                     interNeurons.RemoveAt(randIndex);
                     // Shifting subsequent neuronID's to account for deletion
                     // for (int j = randIndex; j < interNeurons.Count; j++) {
@@ -218,13 +221,11 @@ public class Brain {
                     int randomIndex = Random.Range(0, interNeurons.Count);
 
                     // Substitute random InterNeuron with new InterNeuron while preserving existing Synapses
-                    List<Synapse> oldSynapses = interNeurons[randomIndex].Synapses;
-                    InterNeuron newInter = new InterNeuron(interNeurons[randomIndex].NeuronID, Random.value < invertedNeuronRate);
-                    foreach (Synapse s in oldSynapses) {
-                        s.PreSynapticNeuron = newInter;
-                    }
+                    InterNeuron newInter = new InterNeuron(interNeurons[randomIndex].NeuronID, Random.value < invertedNeuronRate)
+                        {
+                            Synapses = interNeurons[randomIndex].Synapses
+                        };
 
-                    newInter.Synapses = oldSynapses;
                     interNeurons[randomIndex] = newInter;
                     break;
             }
@@ -248,7 +249,7 @@ public class Brain {
                     break;
                 case 1:
                     if (neuronToMutate.Synapses.Count == 0) break;
-                    neuronToMutate.Synapses.RemoveAt(Random.Range(0, neuronToMutate.Synapses.Count));
+                    neuronToMutate.Synapses.Remove(neuronToMutate.Synapses.Keys.ElementAt(Random.Range(0, neuronToMutate.Synapses.Keys.Count)));
                     break;
             }
         }

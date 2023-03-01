@@ -88,14 +88,14 @@ public class World : MonoBehaviour {
         foreach (Organism organism in manager.organismList.ToList()) {
             bool isSurviving = survivalCheck(organism);
 
-            // Randomly preserve 2% of the unfit population / kill 5% of fit population
-            if ((!isSurviving && Random.value < 0.98) || (isSurviving && Random.value < 0.05)) {
+            // Randomly preserve 5% of the unfit population
+            if (!isSurviving && Random.value < 0.95) {
                 killOrganism(organism);
             }
         }
         int survivingCount = manager.organismList.Count;
 
-        // Fill in 80% of missing population by cloning survivors, and the remaining 10% by creating new Organisms.
+        // Fill in 80% of missing population by cloning survivors, and the remaining 20% by creating new Organisms.
         // If no survivors then just creates a new generation of organisms.
         if (manager.organismList.Count > 0) {
             int originalCount = manager.organismList.Count;

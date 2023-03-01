@@ -1,22 +1,19 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace Definitions {
     /// <summary>
     /// IOutputNeuron have Synapses and can output signals
     /// </summary>
     public interface IOutputNeuron {
-        List<Synapse> Synapses { get; set; }
+        Dictionary<Neuron, float> Synapses { get; set; }
         
         public void createSynapse(Neuron postSynapticNeuron, float synapticStrength) {
-            // Forbid autapses
-            if (postSynapticNeuron == this) return;
-            foreach (Synapse synapse in Synapses) {
-                if (synapse.PostSynapticNeuron == postSynapticNeuron) {
-                    return;
-                }
-            }
-
-            Synapses.Add(new Synapse(this, postSynapticNeuron, synapticStrength));
+            // Forbid autapses/duplicate Synapses
+            if (postSynapticNeuron == this || postSynapticNeuron.parentNeurons.Contains(this)) return;
+            
+            postSynapticNeuron.parentNeurons.Add(this);
+            Synapses[postSynapticNeuron] = synapticStrength < 0 ? Random.value * 8 : synapticStrength;
         }
     }
 }
