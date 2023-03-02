@@ -91,13 +91,18 @@ public class Brain {
     }
 
     // Simulates one time step. Each time step the following occurs in order:
-    // 1. All potential summations are computed
-    // 2. Action potentials are initiated
-    // 3. Actions are taken if action neurons experience action potential
-    // 4. Decay/propagation is incremented
+    // 1. Decay/propagation is incremented
+    // 2. All potential summations are computed
+    // 3. Action potentials are initiated
+    // 4. Actions are taken if action neurons experience action potential
     public bool[] simulateStep() {
         bool[] actionOutcomes = new bool[numActions];
         IEnumerable<Neuron> allNeurons = InterNeurons.Concat<Neuron>(SensoryNeurons).Concat(ActionNeurons);
+        
+        // Decay neuron potentials
+        foreach (Neuron neuron in allNeurons) {
+            neuron.decayPotential();
+        }
 
         // Sum potentials for all neurons
         foreach (Neuron neuron in allNeurons) {
@@ -114,11 +119,6 @@ public class Brain {
             if (actionNeuron.IsActive) {
                 actionOutcomes[(int)actionNeuron.ActionType] = true;
             }
-        }
-        
-        // Decay neuron potentials
-        foreach (Neuron neuron in allNeurons) {
-            neuron.decayPotential();
         }
 
         return actionOutcomes;

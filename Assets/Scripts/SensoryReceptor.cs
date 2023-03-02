@@ -8,6 +8,9 @@ public class SensoryReceptor {
     public SensoryReceptorType Type;
     const int VisionDepth = 3;
     float value;
+    
+    // All sensory values are normalized to be between [0, normalizedSensoryBound]
+    float normalizedSensoryBound = 8f;
 
     public SensoryReceptor(SensoryReceptorType type, Organism organism) {
         this.organism = organism;
@@ -30,12 +33,20 @@ public class SensoryReceptor {
 
     public void updateValue() {
         value = Type switch {
-            SensoryReceptorType.LookLeft => look(new int[] {organism.x - VisionDepth, organism.x, organism.y - VisionDepth, organism.y + VisionDepth}),
-            SensoryReceptorType.LookRight => look(new int[] {organism.x + 1, organism.x + VisionDepth, organism.y - VisionDepth, organism.y + VisionDepth}),
-            SensoryReceptorType.LookUp => look(new int[] {organism.x - VisionDepth, organism.x + VisionDepth, organism.y + 1, organism.y + VisionDepth}),
-            SensoryReceptorType.LookDown => look(new int[] {organism.x - VisionDepth, organism.x + VisionDepth, organism.y - VisionDepth, organism.y}),
-            SensoryReceptorType.X => organism.x,
-            SensoryReceptorType.Y => organism.y,
+            SensoryReceptorType.LookLeft => 
+                look(new int[] {organism.x - VisionDepth, organism.x, organism.y - VisionDepth, organism.y + VisionDepth + 1})
+                / ((VisionDepth * 2f + 1) * VisionDepth) * normalizedSensoryBound,
+            SensoryReceptorType.LookRight => 
+                look(new int[] {organism.x + 1, organism.x + VisionDepth + 1, organism.y - VisionDepth, organism.y + VisionDepth + 1})
+                / ((VisionDepth * 2f + 1) * VisionDepth) * normalizedSensoryBound,
+            SensoryReceptorType.LookUp =>
+                look(new int[] {organism.x - VisionDepth, organism.x + VisionDepth + 1, organism.y + 1, organism.y + VisionDepth + 1})
+                / ((VisionDepth * 2f + 1) * VisionDepth) * normalizedSensoryBound,
+            SensoryReceptorType.LookDown => 
+                look(new int[] {organism.x - VisionDepth, organism.x + VisionDepth + 1, organism.y - VisionDepth, organism.y})
+                / ((VisionDepth * 2f + 1) * VisionDepth) * normalizedSensoryBound,
+            SensoryReceptorType.X => 1f * organism.x / Grid.Instance.columns * normalizedSensoryBound,
+            SensoryReceptorType.Y => 1f * organism.y / Grid.Instance.rows * normalizedSensoryBound,
             _ => value
         };
     }

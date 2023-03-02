@@ -16,6 +16,9 @@ namespace UI {
         public Canvas canvas;
         List<GameObject> clones;
         
+        // Used to map NeuronID to index of Neuron in its own list, since NeuronIDs are not equivalent to index.
+        Dictionary<int, int> idMap = new Dictionary<int, int>();
+        
         void Start() {
             clones = new List<GameObject>();
             Vector2 size = neuron.spriteRenderer.size;
@@ -24,7 +27,7 @@ namespace UI {
             Instance = this;
             transform.position = Grid.Instance.getCenter() + new Vector2(Grid.Instance.getWidth() / 2 + neuronWidth, neuronHeight * neuronsPerColumn / 2f);
         }
-
+        
         public void drawBrain(Brain brain) {
             foreach (GameObject g in clones) Destroy(g);
             drawNeurons(brain.SensoryNeurons, brain);
@@ -34,14 +37,17 @@ namespace UI {
         }
         
         void drawNeurons(IEnumerable<Neuron> neurons, Brain brain) {
+            int count = 0;
             foreach (Neuron n in neurons) {
-                NeuronSprite s = Instantiate(neuron, getNeuronPosition(n.NeuronID, n.Type, brain), Quaternion.identity);
+                NeuronSprite s = Instantiate(neuron, getNeuronPosition(count, n.Type, brain), Quaternion.identity);
                 s.neuron = n;
                 s.canvas = canvas;
                 clones.Add(s.gameObject);
+                idMap[n.NeuronID] = count;
+                count++;
             }
         }
-
+        
         Vector3 getNeuronPosition(int NeuronID, NeuronType type, Brain brain) {
             switch (type) {
                 case NeuronType.SensoryNeuron:
@@ -50,26 +56,32 @@ namespace UI {
                     return transform.position + new Vector3((1 + NeuronID / neuronsPerColumn) * (neuronWidth),
                         -(NeuronID % neuronsPerColumn) * neuronHeight);
                 default: {
-                    int numInterNeuronColumns = (brain.InterNeurons[^1].NeuronID + neuronsPerColumn - 1) / neuronsPerColumn;
+                    int numInterNeuronColumns = (idMap[brain.InterNeurons[^1].NeuronID] + neuronsPerColumn - 1) / neuronsPerColumn;
                     return transform.position + new Vector3((1 + numInterNeuronColumns) * neuronWidth,
                         -NeuronID * neuronHeight);
                 }
             }
         }
-
+        
         void drawSynapse(IOutputNeuron outputNeuron, Brain brain) {
             foreach (Neuron postSynapticNeuron in outputNeuron.Synapses.Keys) {
                 Neuron preSynapticNeuron = (Neuron)outputNeuron;
                 LineRenderer drawer = Instantiate(lineRenderer, transform.position, Quaternion.identity);
                 drawer.positionCount = 2;
                 drawer.SetPosition(0, getNeuronPosition(
-                    preSynapticNeuron.NeuronID, preSynapticNeuron.Type, brain));
+                    preSynapticNeuron.Type == NeuronType.InterNeuron 
+                        ? idMap[preSynapticNeuron.NeuronID] 
+                        : preSynapticNeuron.NeuronID, 
+                    preSynapticNeuron.Type, brain));
                 drawer.SetPosition(1, getNeuronPosition(
-                    postSynapticNeuron.NeuronID, postSynapticNeuron.Type, brain));
+                    postSynapticNeuron.Type == NeuronType.InterNeuron 
+                        ? idMap[postSynapticNeuron.NeuronID] 
+                        : postSynapticNeuron.NeuronID, 
+                    postSynapticNeuron.Type, brain));
                 clones.Add(drawer.gameObject);
             }
         }
-
+        
         void drawSynapses(Brain brain) {
             foreach (SensoryNeuron inputNeuron in brain.SensoryNeurons) {
                 drawSynapse(inputNeuron, brain);

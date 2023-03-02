@@ -38,7 +38,7 @@ public class SensoryNeuron : Neuron, IOutputNeuron {
     
     public override void fireActionPotential() {
         foreach (Neuron postSynapticNeuron in Synapses.Keys) {
-            postSynapticNeuron.incomingCurrent += potential * Synapses[postSynapticNeuron];
+            postSynapticNeuron.incomingCurrent += potential;
         }
     }
 
