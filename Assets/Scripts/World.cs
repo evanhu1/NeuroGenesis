@@ -15,6 +15,7 @@ public class World : MonoBehaviour {
     public int stepsPerSecond = 5;
     public int numOrganisms = 5;
     public int numNeurons = 0;
+    public int maxNumNeurons = 100;
     public int numSynapses = 10;
     public float mutationChance;
     public float mutationMagnitude;
@@ -88,18 +89,17 @@ public class World : MonoBehaviour {
         foreach (Organism organism in manager.organismList.ToList()) {
             bool isSurviving = survivalCheck(organism);
 
-            // Randomly preserve 5% of the unfit population
-            if (!isSurviving && Random.value < 0.95) {
+            // Randomly preserve 5% of the unfit population: && Random.value < 0.95
+            if (!isSurviving) {
                 killOrganism(organism);
             }
         }
         int survivingCount = manager.organismList.Count;
 
-        // Fill in 80% of missing population by cloning survivors, and the remaining 20% by creating new Organisms.
+        // Fill in 70% of missing population by cloning survivors, and the remaining 10% by creating new Organisms.
         // If no survivors then just creates a new generation of organisms.
         if (manager.organismList.Count > 0) {
-            int originalCount = manager.organismList.Count;
-            for (int i = 0; i < (int)(0.8f * (numOrganisms - originalCount)); i++) spawnOffspring(manager.organismList[Random.Range(0, originalCount)]);
+            for (int i = 0; i < (int)(0.7f * (numOrganisms - survivingCount)); i++) spawnOffspring(manager.organismList[Random.Range(0, survivingCount)]);
             for (int i = 0; i < numOrganisms - manager.organismList.Count; i++) createOrganism(manager.organismList.Count, 0, 0);
         }
         else {
@@ -145,6 +145,7 @@ public class World : MonoBehaviour {
             do {
                 int newX = Random.Range(0, Grid.Instance.columns);
                 int newY = Random.Range(0, Grid.Instance.rows);
+                org.brain.ResetState();
                 org.move(newX, newY);
             } while (survivalCheck(org));
         }

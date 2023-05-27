@@ -7,9 +7,9 @@ namespace Definitions {
         public float actionPotentialThreshold;
         public float restingPotential;
         public float potential;
-        public float PotentialDecayRate;
         public int NeuronID;
-
+        public float PotentialDecayRate = 0.8f;
+        
         /// <summary>
         /// Keeps track of all Neurons that have a Synapse connected to this Neuron.
         /// </summary>
@@ -69,9 +69,8 @@ namespace Definitions {
         protected Neuron() {
             actionPotentialThreshold = -55f;
             restingPotential = -70f;
-            PotentialDecayRate = Random.Range(0.5f, 0.9f);
             potential = restingPotential;
-            actionPotentialLength = Random.Range(0, 3);
+            actionPotentialLength = Random.Range(0, 1);
             actionPotentialTime = -1;
             parentNeurons = new List<IOutputNeuron>();
         }
@@ -102,5 +101,6 @@ namespace Definitions {
         }
 
         public bool thresholdReached() => isInvertedNeuron ^ (potential > actionPotentialThreshold);
+        
     }
 }

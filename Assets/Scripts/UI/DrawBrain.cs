@@ -16,9 +16,6 @@ namespace UI {
         public Canvas canvas;
         List<GameObject> clones;
         
-        // Used to map NeuronID to index of Neuron in its own list, since NeuronIDs are not equivalent to index.
-        Dictionary<int, int> idMap = new Dictionary<int, int>();
-        
         void Start() {
             clones = new List<GameObject>();
             Vector2 size = neuron.spriteRenderer.size;
@@ -30,16 +27,20 @@ namespace UI {
         
         public void drawBrain(Brain brain) {
             foreach (GameObject g in clones) Destroy(g);
-            drawNeurons(brain.SensoryNeurons, brain);
-            drawNeurons(brain.InterNeurons, brain);
-            drawNeurons(brain.ActionNeurons, brain);
-            drawSynapses(brain);
+            
+            // Used to map NeuronID to index of Neuron in its own list, since NeuronIDs are not equivalent to index.
+            Dictionary<int, int> idMap = new Dictionary<int, int>();
+            
+            drawNeurons(brain.SensoryNeurons, brain, idMap);
+            drawNeurons(brain.InterNeurons, brain, idMap);
+            drawNeurons(brain.ActionNeurons, brain, idMap);
+            drawSynapses(brain, idMap);
         }
         
-        void drawNeurons(IEnumerable<Neuron> neurons, Brain brain) {
+        void drawNeurons(IEnumerable<Neuron> neurons, Brain brain, Dictionary<int, int> idMap) {
             int count = 0;
             foreach (Neuron n in neurons) {
-                NeuronSprite s = Instantiate(neuron, getNeuronPosition(count, n.Type, brain), Quaternion.identity);
+                NeuronSprite s = Instantiate(neuron, getNeuronPosition(count, n.Type, brain, idMap), Quaternion.identity);
                 s.neuron = n;
                 s.canvas = canvas;
                 clones.Add(s.gameObject);
@@ -48,7 +49,7 @@ namespace UI {
             }
         }
         
-        Vector3 getNeuronPosition(int NeuronID, NeuronType type, Brain brain) {
+        Vector3 getNeuronPosition(int NeuronID, NeuronType type, Brain brain, Dictionary<int, int> idMap) {
             switch (type) {
                 case NeuronType.SensoryNeuron:
                     return transform.position + new Vector3(0, -NeuronID * neuronHeight);
@@ -63,31 +64,39 @@ namespace UI {
             }
         }
         
-        void drawSynapse(IOutputNeuron outputNeuron, Brain brain) {
+        void drawSynapse(IOutputNeuron outputNeuron, Brain brain, Dictionary<int, int> idMap) {
             foreach (Neuron postSynapticNeuron in outputNeuron.Synapses.Keys) {
                 Neuron preSynapticNeuron = (Neuron)outputNeuron;
+                float synapticStrength = outputNeuron.Synapses[postSynapticNeuron];
                 LineRenderer drawer = Instantiate(lineRenderer, transform.position, Quaternion.identity);
+                
+                if (synapticStrength < 0) drawer.endColor = Color.black;
+                drawer.widthMultiplier = Math.Abs(synapticStrength) / IOutputNeuron.synapticStrengthMax * 2;
                 drawer.positionCount = 2;
                 drawer.SetPosition(0, getNeuronPosition(
                     preSynapticNeuron.Type == NeuronType.InterNeuron 
                         ? idMap[preSynapticNeuron.NeuronID] 
                         : preSynapticNeuron.NeuronID, 
-                    preSynapticNeuron.Type, brain));
+                    preSynapticNeuron.Type, 
+                    brain,
+                    idMap));
                 drawer.SetPosition(1, getNeuronPosition(
                     postSynapticNeuron.Type == NeuronType.InterNeuron 
                         ? idMap[postSynapticNeuron.NeuronID] 
                         : postSynapticNeuron.NeuronID, 
-                    postSynapticNeuron.Type, brain));
+                    postSynapticNeuron.Type,
+                    brain,
+                    idMap));
                 clones.Add(drawer.gameObject);
             }
         }
         
-        void drawSynapses(Brain brain) {
+        void drawSynapses(Brain brain, Dictionary<int, int> idMap) {
             foreach (SensoryNeuron inputNeuron in brain.SensoryNeurons) {
-                drawSynapse(inputNeuron, brain);
+                drawSynapse(inputNeuron, brain, idMap);
             }
             foreach (InterNeuron inputNeuron in brain.InterNeurons) {
-                drawSynapse(inputNeuron, brain);
+                drawSynapse(inputNeuron, brain, idMap);
             }
         }
     }

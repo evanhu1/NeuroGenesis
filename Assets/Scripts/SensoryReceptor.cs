@@ -6,11 +6,11 @@ using Random = UnityEngine.Random;
 public class SensoryReceptor {
     Organism organism;
     public SensoryReceptorType Type;
-    const int VisionDepth = 3;
+    const int VisionDepth = 0;
     float value;
     
     // All sensory values are normalized to be between [0, normalizedSensoryBound]
-    float normalizedSensoryBound = 8f;
+    float normalizedSensoryBound = 4f;
 
     public SensoryReceptor(SensoryReceptorType type, Organism organism) {
         this.organism = organism;
@@ -31,20 +31,37 @@ public class SensoryReceptor {
         return signalStrength;
     }
 
-    public void updateValue() {
-        value = Type switch {
-            SensoryReceptorType.LookLeft => 
-                look(new int[] {organism.x - VisionDepth, organism.x, organism.y - VisionDepth, organism.y + VisionDepth + 1})
+    public float lookDirection(SensoryReceptorType type) {
+        if (VisionDepth == 0) return 0f;
+        return type switch {
+            SensoryReceptorType.LookLeft =>
+                look(new int[]
+                    { organism.x - VisionDepth, organism.x, organism.y - VisionDepth, organism.y + VisionDepth + 1 })
                 / ((VisionDepth * 2f + 1) * VisionDepth) * normalizedSensoryBound,
-            SensoryReceptorType.LookRight => 
-                look(new int[] {organism.x + 1, organism.x + VisionDepth + 1, organism.y - VisionDepth, organism.y + VisionDepth + 1})
+            SensoryReceptorType.LookRight =>
+                look(new int[] {
+                    organism.x + 1, organism.x + VisionDepth + 1, organism.y - VisionDepth, organism.y + VisionDepth + 1
+                })
                 / ((VisionDepth * 2f + 1) * VisionDepth) * normalizedSensoryBound,
             SensoryReceptorType.LookUp =>
-                look(new int[] {organism.x - VisionDepth, organism.x + VisionDepth + 1, organism.y + 1, organism.y + VisionDepth + 1})
+                look(new int[] {
+                    organism.x - VisionDepth, organism.x + VisionDepth + 1, organism.y + 1, organism.y + VisionDepth + 1
+                })
                 / ((VisionDepth * 2f + 1) * VisionDepth) * normalizedSensoryBound,
-            SensoryReceptorType.LookDown => 
-                look(new int[] {organism.x - VisionDepth, organism.x + VisionDepth + 1, organism.y - VisionDepth, organism.y})
+            SensoryReceptorType.LookDown =>
+                look(new int[]
+                    { organism.x - VisionDepth, organism.x + VisionDepth + 1, organism.y - VisionDepth, organism.y })                
                 / ((VisionDepth * 2f + 1) * VisionDepth) * normalizedSensoryBound,
+            _ => 0
+        };
+    }
+
+    public void updateValue() {
+        value = Type switch {
+            SensoryReceptorType.LookDown => lookDirection(Type),
+            SensoryReceptorType.LookLeft => lookDirection(Type),
+            SensoryReceptorType.LookRight => lookDirection(Type),
+            SensoryReceptorType.LookUp => lookDirection(Type),
             SensoryReceptorType.X => 1f * organism.x / Grid.Instance.columns * normalizedSensoryBound,
             SensoryReceptorType.Y => 1f * organism.y / Grid.Instance.rows * normalizedSensoryBound,
             _ => value

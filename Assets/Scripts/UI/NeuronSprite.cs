@@ -37,14 +37,13 @@ namespace UI {
             };
         }
         void Update() {
-            spriteRenderer.color = neuron.thresholdReached() ? Color.white : color;
+            spriteRenderer.color = neuron.thresholdReached() ? Color.white : neuron.isInvertedNeuron ? Color.gray : color;
             if (label.enabled) label.text = neuron.potential.ToString(CultureInfo.CurrentCulture);
         }
 
         void OnMouseEnter() {
             label.enabled = true;
             id.enabled = true;
-
         }
 
         void OnMouseExit() {

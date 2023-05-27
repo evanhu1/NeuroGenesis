@@ -44,6 +44,6 @@ public class SensoryNeuron : Neuron, IOutputNeuron {
 
     public override void sumPotentials() {
         Receptor.updateValue();
-        potential += Receptor.getValue();
+        potential = Receptor.getValue();
     }
 }

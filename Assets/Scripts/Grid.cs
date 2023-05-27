@@ -49,12 +49,8 @@ public class Grid : MonoBehaviour {
     }
 
     public bool checkOrganismExistsAt(int x, int y) {
-        return world.manager.OrganismDict.ContainsKey(Tuple.Create(x, y));
+        return world.manager.OrganismDict.ContainsKey(Tuple.Create(x, y)) && world.manager.OrganismDict[Tuple.Create(x, y)].Count > 0;
     }
-
+    
     public void moveOrganism(Organism organism, int x, int y) => world.manager.moveOrganism(organism, x, y);
-
-    // Update is called once per frame
-    void Update() {
-    }
 }
