@@ -14,7 +14,8 @@ namespace Definitions {
             if (postSynapticNeuron == this || postSynapticNeuron.parentNeurons.Contains(this)) return;
             
             postSynapticNeuron.parentNeurons.Add(this);
-            Synapses[postSynapticNeuron] = synapticStrength < 0 ? Random.Range(-synapticStrengthMax, synapticStrengthMax) : synapticStrength;
+            float randStrength = Random.Range(0, synapticStrengthMax) * (Random.value < 0.5 ? -1 : 1);
+            Synapses[postSynapticNeuron] = synapticStrength < 0 ? randStrength : synapticStrength;
         }
     }
 }

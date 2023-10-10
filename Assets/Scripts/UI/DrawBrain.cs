@@ -74,16 +74,12 @@ namespace UI {
                 drawer.widthMultiplier = Math.Abs(synapticStrength) / IOutputNeuron.synapticStrengthMax * 2;
                 drawer.positionCount = 2;
                 drawer.SetPosition(0, getNeuronPosition(
-                    preSynapticNeuron.Type == NeuronType.InterNeuron 
-                        ? idMap[preSynapticNeuron.NeuronID] 
-                        : preSynapticNeuron.NeuronID, 
+                    idMap[preSynapticNeuron.NeuronID],
                     preSynapticNeuron.Type, 
                     brain,
                     idMap));
                 drawer.SetPosition(1, getNeuronPosition(
-                    postSynapticNeuron.Type == NeuronType.InterNeuron 
-                        ? idMap[postSynapticNeuron.NeuronID] 
-                        : postSynapticNeuron.NeuronID, 
+                    idMap[postSynapticNeuron.NeuronID],
                     postSynapticNeuron.Type,
                     brain,
                     idMap));

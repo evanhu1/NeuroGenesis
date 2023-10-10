@@ -10,7 +10,7 @@ public class SensoryReceptor {
     float value;
     
     // All sensory values are normalized to be between [0, normalizedSensoryBound]
-    float normalizedSensoryBound = 4f;
+    float normalizedSensoryBound = 8f;
 
     public SensoryReceptor(SensoryReceptorType type, Organism organism) {
         this.organism = organism;

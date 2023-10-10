@@ -40,6 +40,8 @@ public class SensoryNeuron : Neuron, IOutputNeuron {
         foreach (Neuron postSynapticNeuron in Synapses.Keys) {
             postSynapticNeuron.incomingCurrent += potential;
         }
+        
+        potential = restingPotential;
     }
 
     public override void sumPotentials() {

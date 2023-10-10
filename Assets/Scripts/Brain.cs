@@ -7,7 +7,8 @@ using Random = UnityEngine.Random;
 
 public class Brain {
     int numActions = (int) ActionType.NumActions;
-    int numSensors = (int) SensoryReceptorType.NumTypes;
+    // int numSensors = (int) SensoryReceptorType.NumTypes;
+    int numSensors = 2;
     int numNeurons;
     public int numSynapses;
     public List<InterNeuron> InterNeurons;
@@ -15,7 +16,7 @@ public class Brain {
     public List<ActionNeuron> ActionNeurons;
     Organism organism;
     
-    float invertedNeuronRate = 0.5f;
+    float invertedNeuronRate = 0.4f;
 
     public Brain(Organism organism, int numNeurons, int numSynapses) {
         Assert.IsTrue(numSynapses <=
@@ -69,7 +70,7 @@ public class Brain {
     }
 
     void generateSensoryNeurons() {
-        for (int i = 0; i < numSensors; i++) {
+        for (int i = 4; i < 6; i++) {
             SensoryNeurons.Add(
                 new SensoryNeuron(i, organism)
             );
@@ -131,6 +132,8 @@ public class Brain {
         List<SensoryNeuron> newSensoryNeurons = new List<SensoryNeuron>();
         List<InterNeuron> newInterNeurons = new List<InterNeuron>();
         List<ActionNeuron> newActionNeurons = new List<ActionNeuron>();
+        
+        // Maps parent neuron to corresponding new neuron for retrieval later when mutating.
         Dictionary<Neuron, Neuron> neuronMap = new Dictionary<Neuron, Neuron>();
         
         foreach (SensoryNeuron sensoryNeuron in SensoryNeurons) {

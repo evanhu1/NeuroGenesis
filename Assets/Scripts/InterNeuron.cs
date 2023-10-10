@@ -33,5 +33,7 @@ public class InterNeuron : Neuron, IOutputNeuron {
         foreach (Neuron postSynapticNeuron in Synapses.Keys) {
             postSynapticNeuron.incomingCurrent += Synapses[postSynapticNeuron];
         }
+
+        potential = restingPotential;
     }
 }

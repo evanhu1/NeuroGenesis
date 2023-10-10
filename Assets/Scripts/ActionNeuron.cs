@@ -32,5 +32,6 @@ public class ActionNeuron : Neuron {
 
     public override void fireActionPotential() {
         IsActive = potential > actionPotentialThreshold;
+        potential = restingPotential;
     }
 }

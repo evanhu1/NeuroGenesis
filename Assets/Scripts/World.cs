@@ -79,10 +79,12 @@ public class World : MonoBehaviour {
     static bool survivalCheck(Organism organism) {
         // return organism.y == Grid.Instance.rows - 1 && organism.x == Grid.Instance.columns - 1;
         // return organism.y > Grid.Instance.rows / 2;
+        // return ((Grid.Instance.columns / 4) < organism.x
+        //         && organism.x < (Grid.Instance.columns * 3 / 4)
+        //         && (Grid.Instance.rows / 4) < organism.y
+        //         && organism.y < (Grid.Instance.rows * 3 / 4));
         return ((Grid.Instance.columns / 4) < organism.x
-                && organism.x < (Grid.Instance.columns * 3 / 4)
-                && (Grid.Instance.rows / 4) < organism.y
-                && organism.y < (Grid.Instance.rows * 3 / 4));
+                && organism.x < (Grid.Instance.columns * 3 / 4));
     }
 
     public int processSurvivingOrganisms() {
@@ -90,16 +92,16 @@ public class World : MonoBehaviour {
             bool isSurviving = survivalCheck(organism);
 
             // Randomly preserve 5% of the unfit population: && Random.value < 0.95
-            if (!isSurviving) {
+            if (!isSurviving && Random.value < 0.95f) {
                 killOrganism(organism);
             }
         }
         int survivingCount = manager.organismList.Count;
 
-        // Fill in 70% of missing population by cloning survivors, and the remaining 10% by creating new Organisms.
+        // Fill in 20% of missing population by cloning survivors, and the remaining by creating new Organisms.
         // If no survivors then just creates a new generation of organisms.
         if (manager.organismList.Count > 0) {
-            for (int i = 0; i < (int)(0.7f * (numOrganisms - survivingCount)); i++) spawnOffspring(manager.organismList[Random.Range(0, survivingCount)]);
+            for (int i = 0; i < (int)(0.2f * (numOrganisms - survivingCount)); i++) spawnOffspring(manager.organismList[Random.Range(0, survivingCount)]);
             for (int i = 0; i < numOrganisms - manager.organismList.Count; i++) createOrganism(manager.organismList.Count, 0, 0);
         }
         else {

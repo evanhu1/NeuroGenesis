@@ -8,7 +8,7 @@ namespace Definitions {
         public float restingPotential;
         public float potential;
         public int NeuronID;
-        public float PotentialDecayRate = 0.8f;
+        public float PotentialDecayRate = 0.7f;
         
         /// <summary>
         /// Keeps track of all Neurons that have a Synapse connected to this Neuron.
