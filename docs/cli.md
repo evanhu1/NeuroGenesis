@@ -24,12 +24,9 @@ The built-in environments all use the same brain adapter, evaluation
 protocol, asexual mutation, and finite reproduction algorithm:
 
 ```bash
-$CLI ecology reaction [run|plan] [OPTIONS]
-$CLI ecology memory [run|plan] [OPTIONS]
-$CLI ecology memory evaluate FROZEN [OPTIONS]
 $CLI ecology next-token [run|plan] [OPTIONS]
-$CLI ecology continual [run|plan] [OPTIONS]
-$CLI ecology renewable [run|plan] [OPTIONS]
+$CLI ecology symbolic [run|plan] [OPTIONS]
+$CLI ecology TASK evaluate RESULT [OPTIONS] [--lesion internal-plasticity]
 $CLI ecology analyze RESULT...
 ```
 
@@ -55,16 +52,49 @@ Shared options:
 - `--exploration-temperature F`: action-sampling temperature multiplier.
 - `--action-selection greedy|sampled`: whether evaluation acts from the
   categorical argmax or deterministic sampling.
-- `--learning-rule disabled|immediate_policy|target_prediction_error|temporal_prediction_error`:
-  generic plasticity-driving signal. Memory defaults to the calibrated
-  immediate-policy rule, next-token prediction uses exact categorical target
-  error, and continual tasks use temporal prediction error.
+- `--learning-rule reward_prediction_error|categorical_prediction_error`:
+  generic postsynaptic learning signal. Reward-learning tasks use signed
+  immediate reward surprise; next-token prediction uses exact learner-visible
+  categorical error at action outputs and reward surprise internally.
+- `--temporal-credit eprop|scalar`: hidden eligibility rule. `eprop` (default)
+  uses leaky-integrator neuron dynamics with the local e-prop state-derivative
+  eligibility; `scalar` uses instantaneous neurons and the simpler presynaptic-
+  times-gain trace. e-prop is the confirmed improvement on temporally deep
+  prediction; the two coincide when a node's leak time constant is minimal.
+- `--hidden-feedback reward|categorical`: hidden-neuron third factor when a
+  categorical target is revealed. `reward` (default) modulates by scalar reward
+  surprise; `categorical` projects the full output error through a fixed random
+  per-neuron sign row (direct feedback alignment, no transported forward
+  weights). Experimental: did not beat the reward default on the hard passage.
+- `--selection tournament|truncation|proportional`: offspring-allocation scheme
+  (default `tournament`). `truncation` gives the top `--truncation-survivors`
+  parents equal shares; `proportional` uses ticket-proportional stochastic
+  universal sampling. Both concentrate reproduction and, empirically, cause
+  premature convergence on exploration-limited tasks.
+- `--truncation-survivors N`: surviving-parent count under truncation selection.
 - `--learning-normalization none|nlms`: generic plasticity normalization.
 - `--reset-dynamics-at-trial-boundary true|false`: adapter policy at semantic
   trial boundaries. Learned weights are retained.
 - `--audit-interval N`: development-audit interval.
 - `--param key=value`: override an asexual mutation parameter. Valid keys are
-  printed by `cli ecology help` and invalid keys fail explicitly.
+  printed by `cli ecology help` and invalid keys fail explicitly. Search is
+  WANN-NEAT: founders are minimal (each enabled source→output pair wired with
+  probability `initial_connection_fraction`, default 0.25 — next-token
+  presets 1.0 because its transition table lives in plastic readout weights —
+  plus the canonical self-recurrent loop), every hidden node carries a
+  heritable activation function from the ten-function weight-agnostic set
+  (random at birth and on insert-node), and `mutate_activation_probability`
+  (default 0.3) reassigns one random hidden node's function per offspring.
+  There is no dense-readout guarantee; evolution owns readout wiring.
+  `add_delay_relay_probability` (default 0.05) is the temporal-memory
+  operator: it inserts a copy node holding a source's value that immediately
+  projects to an output through a plastic edge, so exact memory grows one
+  rewarded tap at a time and relays chain into deeper delays. Relay copies are
+  held canonical (weight one, non-plastic, saturating-linear) — evolution owns
+  whether a tap exists and what it reads out, not what the copy computes.
+  `input_delay_line_depth` (default 0) instead seeds a complete delay line of
+  that depth into founders; leave it at zero to require that evolution
+  discover the structure itself.
 - `--out-dir PATH`: result directory; may appear anywhere after `ecology`.
 
 Search does not use scalar fitness, speciation, crossover, target species,
@@ -73,42 +103,6 @@ one reproductive ticket. After equal evaluation panels finish, one finite
 population-sized set of offspring slots is filled by exact elites and fixed-K
 tournaments followed by bounded asexual mutation. A generation with no success
 events is extinct.
-
-### Reaction
-
-```bash
-$CLI ecology reaction plan --population 64 --generations 100
-$CLI ecology reaction --seed 17 --population 64 --generations 100 \
-  --symbols 17 --out-dir artifacts/research/runs
-```
-
-Task option: `--symbols N`, including the terminal `end` observation. Instances
-contain shuffled `a`-`d` symbols and a final `end`. A correct matching action is
-one success event.
-
-### Memory
-
-```bash
-$CLI ecology memory plan --population 256 --generations 500
-$CLI ecology memory --seed 101 --population 256 --generations 500 \
-  --length 4 --attempts 32 --out-dir artifacts/research/runs
-```
-
-Task options: `--length N`, `--attempts N`. The agent receives zero symbolic
-input and repeatedly emits a sequence over `a`-`h`. During the default 32
-learning attempts, the environment returns balanced immediate reward but no
-reproductive success events. Learning is then disabled and a greedy final
-probe emits one success event for each correct position; positions are
-symmetric, and exact-string accuracy requires all positions to be correct.
-Attempt completion is a semantic trial boundary; the adapter owns the
-neural-state policy applied there. The default memory preset uses a fixed
-100-instance, two-rollout training panel, a 100-instance development panel,
-and a 100-instance, two-rollout sealed panel. Larger panels remain available
-through the generic panel options but are not the default.
-
-`memory evaluate FROZEN` runs a persisted frozen genome through the same
-development/sealed adapter without evolution. It accepts both a bare genome and
-the historical frozen-wrapper format.
 
 ### Basic next-token prediction
 
@@ -129,38 +123,45 @@ persist. After the fourth pass, dynamics reset again and plasticity is frozen
 for the scored greedy probe. The common symbol interface contains `a`--`z`,
 `space`, and `end`; other tasks expose only their declared subsets.
 
-Task option: `--learning-passes N`. Four is the calibrated default; 16 and 32
-passes added compute without improving the discovery run's frozen accuracy.
+Task options:
 
-### Basic continual learning
+- `--learning-passes N`: supervised passes per lifetime. Four is the calibrated
+  default for the canonical snippet; harder passages benefit from 32.
+- `--predictive-coding true|false`: self-supervised mode with no critic and no
+  reward. The learner's error is its own prediction against the next observed
+  character, and each correct in-stream prediction is one reproductive ticket.
+- `--generalize true|false` with `--snippet-length N`: instead of one fixed
+  string, every panel instance draws a freshly generated snippet. Training,
+  development, and sealed panels use different panel seeds, so sealed text is
+  never seen during evolution. A genome cannot pass by having memorized one
+  sequence — only by carrying an architecture that acquires an arbitrary
+  sequence within its own lifetime. Use several `--training-instances` so each
+  generation samples multiple sequences.
 
-```bash
-$CLI ecology continual plan --population 256 --generations 250
-$CLI ecology continual --seed 101 --population 256 --generations 250 \
-  --lifetime-ticks 512 --minimum-regime-ticks 32 \
-  --maximum-regime-ticks 96 --out-dir artifacts/research/runs
-```
-
-The agent receives zero symbolic input during one uninterrupted lifetime. One
-hidden action is rewarded at a time, and the target switches to a different
-action after a deterministic 32--96 tick regime. Correct actions are atomic
-success events. The environment emits no trial boundary, so recurrent dynamics
-and learned weights persist across every reversal. The common adapter uses the
-generic temporal prediction-error learning rule by default.
-
-### Renewable hidden resource
+### Symbolic compute (north star)
 
 ```bash
-$CLI ecology renewable plan --population 256 --generations 250
-$CLI ecology renewable --seed 101 --population 256 --generations 250 \
-  --lifetime-ticks 512 --resource-stock 64 \
-  --out-dir artifacts/research/runs
+$CLI ecology symbolic plan --population 512 --generations 200
+$CLI ecology symbolic --seed 7 --population 512 --generations 200 \
+  --predictive-coding true --learning-passes 8 \
+  --ops copy,reve,rota,dupl,cyph --word-len 4 \
+  --training-instances 8 --out-dir artifacts/research/runs
 ```
 
-Task options: `--lifetime-ticks N`, `--resource-stock N`. The agent receives
-zero symbolic input. Each correct hidden-target action is a success event; after
-the stock is consumed the target changes deterministically without a trial
-boundary.
+Each instance teaches one English-named string operation (`copy`, `reve`,
+`rota`, `dupl`, `cyph`) through demonstration pairs (`reve cat tac`) and probes
+with fresh query words. Demo streams never repeat verbatim, so lifetime
+memorization cannot fit even the training data — execution requires a
+character register plus instruction latching.
+
+Task options: `--ops LIST`, `--word-len N`, `--demos N`, `--queries N`,
+`--learning-passes N`, `--predictive-coding true|false`.
+
+Co-evolutionary forging (`next-token` only): `--coevolve true
+--forge-population N --forge-snippets S` runs an adversarial forge population
+that biases half of each training panel; audits remain on the neutral
+generator, and a `<result>.forges.json` trajectory sidecar records hardness
+per generation.
 
 ### Progress and results
 
@@ -172,10 +173,10 @@ and wall time.
 
 Result artifacts contain the complete task, agent, ecology, search, founder,
 generation, population, work, development, sealed, and termination contracts.
-Development and sealed audits include efference-copy-off and
-prediction-error-feedback-off controls. Audit scores retain a historical
-representative but never allocate reproduction. The plasticity-off control was
-retired after repeated tasks established that the current learner is causal.
+Audit scores retain a historical representative but never allocate
+reproduction. Automatic mechanism lesions were retired after establishing that
+plasticity and action efference copy are causal; targeted lesions belong in
+explicit experiments rather than every evolution run.
 
 ## Explicit world simulator
 

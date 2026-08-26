@@ -11,7 +11,9 @@ pub fn generate_seed_genome<R: Rng + ?Sized>(
             id: seed_hidden_gene_node_id(index as u32),
             bias: sample_initial_bias(rng),
             log_time_constant: sample_initial_log_time_constant(rng),
-            neuromodulatory_receptor: 0.0,
+            activation_fn: ActivationFunction::default(),
+            plasticity_receptor: 0.0,
+            feedback_receptors: types::zero_feedback_receptors(),
         })
         .collect::<Vec<_>>();
     hidden_nodes.sort_unstable_by_key(|node| node.id);
@@ -37,6 +39,7 @@ pub fn generate_seed_genome<R: Rng + ?Sized>(
             action_biases,
             value_bias: 0.0,
             edges: Vec::new(),
+            feedback_channels: Vec::new(),
         },
     };
     if config.num_synapses > 0 {

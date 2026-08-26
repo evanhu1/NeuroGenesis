@@ -90,6 +90,7 @@ fn forced_brain_with_action(preferred_action: ActionType, confidence: f32) -> Br
             pre_inter_index: None,
             pre_action_index: None,
             post_inter_index: None,
+            post_plasticity_receptor: 1.0,
             inherited_weight: if symbol == preferred_symbol {
                 8.0
             } else {
@@ -101,8 +102,9 @@ fn forced_brain_with_action(preferred_action: ActionType, confidence: f32) -> Br
                 -8.0
             },
             plasticity_coefficient: 0.0,
+            eligibility_state: 0.0,
             eligibility: 0.0,
-            pending_coactivation: 0.0,
+            pending_eligibility: 0.0,
         })
         .collect();
     let synapse_count = inter_synapses.len() as u32;
@@ -116,7 +118,10 @@ fn forced_brain_with_action(preferred_action: ActionType, confidence: f32) -> Br
         },
         state: inter_state,
         alpha: 1.0,
-        neuromodulatory_receptor: 0.0,
+        activation_fn: types::ActivationFunction::default(),
+        plasticity_receptor: 0.0,
+        feedback_mask: 0,
+        feedback_receptors: types::zero_feedback_receptors(),
         synapses: inter_synapses,
         output_synapse_start: 0,
     }];
@@ -133,15 +138,13 @@ fn forced_brain_with_action(preferred_action: ActionType, confidence: f32) -> Br
         action_feedback_synapses: Vec::new(),
         previous_inter_activations: vec![0.0],
         previous_action_activations: [0.0; Symbol::COUNT],
-        previous_prediction_error: 0.0,
+        reward_prediction: 0.0,
         value_bias: 0.0,
         inherited_value_bias: 0.0,
         value_bias_eligibility: 0.0,
+        pending_value_bias_eligibility: 0.0,
+        feedback_channels: Vec::new(),
         synapse_count,
-        sensory_mean_activation: vec![0.0],
-        inter_mean_activation: vec![0.0],
-        action_mean_activation: vec![0.0; Symbol::COUNT],
-        means_initialized: false,
     }
 }
 

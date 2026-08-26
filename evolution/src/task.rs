@@ -1,4 +1,5 @@
 use anyhow::Result;
+use rayon::prelude::*;
 use serde::Serialize;
 use types::{OrganismGenome, SensoryReceptor, Symbol};
 
@@ -34,6 +35,13 @@ pub trait GenomeTask: Sync {
     /// consuming search variation in plasticity timescale genes.
     fn lifetime_learning_enabled(&self) -> bool {
         self.temporal_credit_enabled()
+    }
+
+    /// Whether this task runs the critic-free predictive-coding learner, which
+    /// drives hidden plasticity through the evolvable neuromodulatory channels.
+    /// Founder genomes allocate channel machinery only when this is set.
+    fn predictive_coding_enabled(&self) -> bool {
+        false
     }
 }
 
@@ -88,6 +96,63 @@ pub trait ResourceEcologyTask: GenomeTask {
         state: &mut Self::LifetimeState,
         context: ResourceLifetimeContext,
     ) -> Result<ResourceLifetimeOutcome<Self::LifetimeEvaluation>>;
+
+    /// Evaluate an entire population in one call. The default implementation
+    /// runs the historical per-genome path (initialize + evaluate inside one
+    /// population-level parallel join). Tasks whose lifetimes decompose into
+    /// many independent instances can override this with a population-wide
+    /// flattened schedule: fewer, larger joins and better work stealing.
+    fn evaluate_population(
+        &self,
+        genomes: &[&OrganismGenome],
+        ids: &[u64],
+        run_seed: u64,
+        generation: u32,
+        pool: &rayon::ThreadPool,
+    ) -> Result<Vec<crate::task_adapter::PopulationOutcome<Self::LifetimeEvaluation>>>
+    where
+        Self: Sized,
+    {
+        Self::evaluate_population_default(self, genomes, ids, run_seed, generation, pool)
+    }
+
+    /// The historical per-genome evaluation path, callable from overrides that
+    /// want to fall back for small panels.
+    fn evaluate_population_default(
+        &self,
+        genomes: &[&OrganismGenome],
+        ids: &[u64],
+        run_seed: u64,
+        generation: u32,
+        pool: &rayon::ThreadPool,
+    ) -> Result<Vec<crate::task_adapter::PopulationOutcome<Self::LifetimeEvaluation>>>
+    where
+        Self: Sized,
+    {
+        pool.install(|| {
+            genomes
+                .par_iter()
+                .zip(ids)
+                .map(|(genome, id)| {
+                    let mut state = self.initialize_lifetime(genome, *id, run_seed, generation)?;
+                    let outcome = self.evaluate_lifetime(
+                        genome,
+                        &mut state,
+                        ResourceLifetimeContext {
+                            generation,
+                            lifetime_ticks: self.lifetime_ticks(),
+                            individual_id: *id,
+                        },
+                    )?;
+                    Ok(crate::task_adapter::PopulationOutcome {
+                        reproductive_tickets: outcome.reproductive_tickets,
+                        work: outcome.work,
+                        evaluation: outcome.evaluation,
+                    })
+                })
+                .collect()
+        })
+    }
 
     fn audit(
         &self,

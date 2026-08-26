@@ -4,11 +4,8 @@
 //! consequences, and episode boundaries. Agent execution, learning, and
 //! reproduction live in downstream crates.
 
-pub mod continual_learning;
-pub mod memory;
 pub mod next_token_prediction;
-pub mod reaction;
-pub mod renewable_resource;
+pub mod symbolic_compute;
 
 use anyhow::Result;
 use serde::Serialize;
@@ -26,6 +23,10 @@ pub struct Transition {
     /// Correct action for evaluator-only probability diagnostics. This is not
     /// included in the next observation.
     pub expected_action: Option<Symbol>,
+    /// Categorical target explicitly revealed to the learner after it has
+    /// predicted. This is distinct from evaluator-only correctness metadata;
+    /// only self-supervised/supervised environments may populate it.
+    pub teaching_target: Option<Symbol>,
     /// Count of atomic successes produced by this environment transition.
     /// Consumers decide how, or whether, these events affect optimization.
     pub success_events: u32,
@@ -48,6 +49,16 @@ pub trait SymbolicTask: Sync {
     fn validate(&self) -> Result<()>;
     fn observes_symbols(&self) -> bool {
         false
+    }
+    fn reveals_teaching_targets(&self) -> bool {
+        false
+    }
+    /// Whether this task uses the value/critic reward-prediction pathway. When
+    /// false the learner runs with no critic and no reward; for predictive-
+    /// coding next-token, hidden plasticity is driven from prediction error via
+    /// neuromodulatory channels instead.
+    fn uses_value_critic(&self) -> bool {
+        true
     }
     fn action_enabled(&self, action: Symbol) -> bool;
     fn max_steps_per_instance(&self) -> usize;

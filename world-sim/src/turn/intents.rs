@@ -115,15 +115,20 @@ fn select_action_for_organism(
         },
         scratch,
     );
-    if context.runtime_plasticity_enabled {
-        compute_pending_coactivations(organism, scratch);
-    }
-
     let selected_symbol = if context.force_random_actions {
         uniform_random_action_symbol(action_sample, context.predation_enabled)
     } else {
         evaluation.selected_symbol
     };
+    if context.runtime_plasticity_enabled && !context.force_random_actions {
+        accumulate_runtime_eligibilities(
+            organism,
+            scratch,
+            selected_symbol,
+            context.leaky_neurons_enabled,
+        );
+    }
+    store_action_efference_copy(&mut organism.brain, selected_symbol);
     let selected_action = if selected_symbol.is_action_enabled(context.predation_enabled) {
         selected_symbol.action_type()
     } else {

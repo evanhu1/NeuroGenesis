@@ -28,7 +28,10 @@ pub fn express_genome(genome: &OrganismGenome) -> BrainState {
             ),
             state: 0.0,
             alpha,
-            neuromodulatory_receptor: gene.neuromodulatory_receptor,
+            activation_fn: gene.activation_fn,
+            plasticity_receptor: gene.plasticity_receptor,
+            feedback_mask: categorical_feedback_mask(gene.id),
+            feedback_receptors: gene.feedback_receptors,
             synapses: Vec::new(),
             output_synapse_start: 0,
         });
@@ -39,7 +42,6 @@ pub fn express_genome(genome: &OrganismGenome) -> BrainState {
         action.push(make_action_neuron(symbol.action_neuron_id().0, symbol));
     }
 
-    let num_sensory = sensory.len();
     let num_inter = inter.len();
     let mut brain = BrainState {
         sensory,
@@ -49,15 +51,13 @@ pub fn express_genome(genome: &OrganismGenome) -> BrainState {
         action_feedback_synapses: Vec::new(),
         previous_inter_activations: vec![0.0; num_inter],
         previous_action_activations: [0.0; ACTION_COUNT],
-        previous_prediction_error: 0.0,
+        reward_prediction: 0.0,
         value_bias: genome.brain.value_bias,
         inherited_value_bias: genome.brain.value_bias,
         value_bias_eligibility: 0.0,
+        pending_value_bias_eligibility: 0.0,
+        feedback_channels: genome.brain.feedback_channels.clone(),
         synapse_count: 0,
-        sensory_mean_activation: vec![0.0; num_sensory],
-        inter_mean_activation: vec![0.0; num_inter],
-        action_mean_activation: vec![0.0; ACTION_COUNT],
-        means_initialized: false,
     };
     wire_birth_synapses_from_genome(genome, &runtime_index_by_gene_index, &mut brain);
     refresh_output_synapse_starts_and_count(&mut brain);
@@ -110,7 +110,8 @@ fn wire_birth_synapses_from_genome(
         };
 
         if edge.timing == SynapseTiming::PreviousTick {
-            let mut runtime_edge = runtime_edge_from_gene(edge, pre_runtime_id, post_runtime_id);
+            let mut runtime_edge =
+                runtime_edge_from_gene(genome, edge, pre_runtime_id, post_runtime_id);
             runtime_edge.post_inter_index =
                 crate::topology::inter_index(post_runtime_id, brain.inter.len())
                     .and_then(|index| u32::try_from(index).ok());
@@ -134,6 +135,7 @@ fn wire_birth_synapses_from_genome(
                 continue;
             };
             pre.synapses.push(runtime_edge_from_gene(
+                genome,
                 edge,
                 pre_runtime_id,
                 post_runtime_id,
@@ -149,6 +151,7 @@ fn wire_birth_synapses_from_genome(
             continue;
         };
         pre.synapses.push(runtime_edge_from_gene(
+            genome,
             edge,
             pre_runtime_id,
             post_runtime_id,
@@ -276,6 +279,7 @@ fn hidden_topological_order(genome: &OrganismGenome) -> Vec<usize> {
 }
 
 fn runtime_edge_from_gene(
+    genome: &OrganismGenome,
     gene: &SynapseGene,
     pre_neuron_id: NeuronId,
     post_neuron_id: NeuronId,
@@ -284,19 +288,48 @@ fn runtime_edge_from_gene(
     // every retained edge and spatial-prior additions sample within
     // [SYNAPSE_STRENGTH_MIN, SYNAPSE_STRENGTH_MAX].
     debug_assert_eq!(gene.weight, constrain_weight(gene.weight));
+    let post_plasticity_receptor = genome
+        .brain
+        .hidden_nodes
+        .binary_search_by_key(&gene.post_node_id, |node| node.id)
+        .ok()
+        .map_or(1.0, |index| {
+            genome.brain.hidden_nodes[index].plasticity_receptor
+        });
     SynapseEdge {
         pre_neuron_id,
         post_neuron_id,
         timing: gene.timing,
         pre_inter_index: None,
         pre_action_index: None,
-        post_inter_index: None,
+        post_inter_index: crate::topology::inter_index(
+            post_neuron_id,
+            genome.brain.hidden_nodes.len(),
+        )
+        .and_then(|index| u32::try_from(index).ok()),
+        post_plasticity_receptor,
         inherited_weight: gene.weight,
         weight: gene.weight,
         plasticity_coefficient: gene.plasticity_coefficient,
+        eligibility_state: 0.0,
         eligibility: 0.0,
-        pending_coactivation: 0.0,
+        pending_eligibility: 0.0,
     }
+}
+
+/// Deterministic fixed sign row for a hidden neuron's direct-feedback
+/// projection, packed one bit per action. Keyed on the stable hidden-gene
+/// identity so the projection a receptor is tuned against never shifts as
+/// topology evolves. This is a fixed random feedback matrix (direct feedback
+/// alignment), not a transported forward weight.
+fn categorical_feedback_mask(gene_id: GeneNodeId) -> u32 {
+    let mut value = gene_id.0 ^ 0x9e37_79b9_7f4a_7c15;
+    value ^= value >> 30;
+    value = value.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    value ^= value >> 27;
+    value = value.wrapping_mul(0x94d0_49bb_1331_11eb);
+    value ^= value >> 31;
+    value as u32
 }
 
 fn make_neuron(id: NeuronId, neuron_type: NeuronType, bias: f32) -> NeuronState {

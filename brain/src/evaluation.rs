@@ -70,11 +70,6 @@ pub fn evaluate_brain_state(
             edge.weight * brain.previous_action_activations[pre_index];
         result.synapse_ops += 1;
     }
-    if brain.previous_prediction_error != 0.0 {
-        for (input, hidden) in scratch.inter_inputs.iter_mut().zip(&brain.inter) {
-            *input += hidden.neuromodulatory_receptor * brain.previous_prediction_error;
-        }
-    }
     for sensory in &brain.sensory {
         if sensory.neuron.activation == 0.0 {
             continue;
@@ -100,7 +95,7 @@ pub fn evaluate_brain_state(
             } else {
                 scratch.inter_inputs[idx]
             };
-            neuron.neuron.activation = fast_tanh(neuron.state);
+            neuron.neuron.activation = crate::activation::apply(neuron.activation_fn, neuron.state);
             neuron.neuron.activation
         };
         let inter = &brain.inter[idx];
@@ -128,6 +123,7 @@ pub fn evaluate_brain_state(
     }
     result.action_logits = action_inputs;
     result.value_prediction = fast_tanh(value_input + brain.value_bias);
+    brain.reward_prediction = result.value_prediction;
     for (idx, action) in brain.action.iter_mut().enumerate() {
         debug_assert_eq!(action.symbol.index(), idx);
         action.logit = action_inputs[idx];
@@ -199,9 +195,11 @@ fn accumulate_inter_inputs(
     }
     let mut synapse_ops = 0;
     for edge in edges {
-        let Some(idx) = inter_index(edge.post_neuron_id, inter_inputs.len()) else {
-            continue;
-        };
+        // Expressed inter-group edges target hidden neurons only; the dense
+        // index is the unchecked inverse of the ID mapping (see
+        // `dense_inter_index`). The debug assert keeps malformed brains loud.
+        let idx = crate::topology::dense_inter_index(edge.post_neuron_id);
+        debug_assert!(idx < inter_inputs.len());
         inter_inputs[idx] += source_activation * edge.weight;
         synapse_ops += 1;
     }

@@ -8,8 +8,10 @@ use crate::grid::{hex_neighbor, rotate_left, rotate_right};
 use crate::Simulation;
 #[cfg(feature = "profiling")]
 use crate::{profiling, profiling::TurnPhase};
-use brain::{apply_runtime_weight_updates, compute_pending_coactivations};
-use brain::{evaluate_brain, BrainEvalContext, BrainScratch};
+use brain::{
+    accumulate_runtime_eligibilities, apply_runtime_weight_updates, evaluate_brain,
+    store_action_efference_copy, BrainEvalContext, BrainScratch,
+};
 use rayon::prelude::*;
 use rayon::{ThreadPool, ThreadPoolBuilder};
 use std::sync::Arc;

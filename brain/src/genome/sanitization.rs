@@ -36,16 +36,16 @@ pub fn align_genome_vectors<R: Rng + ?Sized>(genome: &mut OrganismGenome, rng: &
         if !node.log_time_constant.is_finite() {
             node.log_time_constant = sample_initial_log_time_constant(rng);
         }
-        if !node.neuromodulatory_receptor.is_finite() {
-            node.neuromodulatory_receptor = sample_initial_neuromodulatory_receptor(rng);
+        if !node.plasticity_receptor.is_finite() {
+            node.plasticity_receptor = sample_initial_plasticity_receptor(rng);
         }
         node.bias = node.bias.clamp(-BIAS_MAX, BIAS_MAX);
         node.log_time_constant = node
             .log_time_constant
             .clamp(INTER_LOG_TIME_CONSTANT_MIN, INTER_LOG_TIME_CONSTANT_MAX);
-        node.neuromodulatory_receptor = node
-            .neuromodulatory_receptor
-            .clamp(-NEUROMODULATORY_RECEPTOR_MAX, NEUROMODULATORY_RECEPTOR_MAX);
+        node.plasticity_receptor = node
+            .plasticity_receptor
+            .clamp(-PLASTICITY_RECEPTOR_MAX, PLASTICITY_RECEPTOR_MAX);
     }
 
     // Total ordering across malformed duplicates makes the retained allele
@@ -54,10 +54,8 @@ pub fn align_genome_vectors<R: Rng + ?Sized>(genome: &mut OrganismGenome, rng: &
         a.id.cmp(&b.id)
             .then_with(|| a.bias.total_cmp(&b.bias))
             .then_with(|| a.log_time_constant.total_cmp(&b.log_time_constant))
-            .then_with(|| {
-                a.neuromodulatory_receptor
-                    .total_cmp(&b.neuromodulatory_receptor)
-            })
+            .then_with(|| a.plasticity_receptor.total_cmp(&b.plasticity_receptor))
+            .then_with(|| (a.activation_fn as u8).cmp(&(b.activation_fn as u8)))
     });
     genome
         .brain
@@ -110,11 +108,11 @@ pub(super) fn debug_assert_genome_well_formed(genome: &OrganismGenome) {
                 == node
                     .log_time_constant
                     .clamp(INTER_LOG_TIME_CONSTANT_MIN, INTER_LOG_TIME_CONSTANT_MAX)
-            && node.neuromodulatory_receptor.is_finite()
-            && node.neuromodulatory_receptor
+            && node.plasticity_receptor.is_finite()
+            && node.plasticity_receptor
                 == node
-                    .neuromodulatory_receptor
-                    .clamp(-NEUROMODULATORY_RECEPTOR_MAX, NEUROMODULATORY_RECEPTOR_MAX)
+                    .plasticity_receptor
+                    .clamp(-PLASTICITY_RECEPTOR_MAX, PLASTICITY_RECEPTOR_MAX)
     }));
     debug_assert_synapse_genes_well_formed(genome);
     debug_assert!(enabled_hidden_graph_is_acyclic(genome));

@@ -765,6 +765,69 @@ pub struct BrainTopology {
     #[serde(default)]
     pub value_bias: f32,
     pub edges: Vec<SynapseGene>,
+    /// Evolvable neuromodulatory channel matrix, row-major `channel*ACTION + k`.
+    /// Each channel is a projection of the categorical prediction error that is
+    /// broadcast globally and read through per-neuron `feedback_receptors`.
+    /// Length `feedback_channel_count * Symbol::COUNT`; empty means no channels.
+    #[serde(default)]
+    pub feedback_channels: Vec<f32>,
+}
+
+/// Heritable per-neuron transfer function, adapted from the weight-agnostic
+/// network operator set (Gaier & Ha 2019). Applied to a hidden neuron's
+/// post-leak membrane state.
+///
+/// Every function's output lies in [-1, 1]. That bound is a first-class
+/// invariant of this recurrent substrate, not a tanh legacy: previous-tick
+/// loops with weight magnitudes up to 1.5 and near-zero leak grow any
+/// unbounded transfer geometrically across ticks until f32 overflow, and one
+/// shared range keeps every unit commensurate for recurrent mixing, action
+/// logits, and eligibility. Six functions are naturally bounded; the four
+/// `Saturating*` variants are the saturating forms of their unbounded
+/// namesakes and are named for what they actually compute.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+#[repr(u8)]
+pub enum ActivationFunction {
+    #[default]
+    Tanh,
+    /// `clamp(x, -1, 1)` — the saturating (hard-tanh) form of identity.
+    SaturatingLinear,
+    Step,
+    Sin,
+    Cos,
+    Gaussian,
+    Sigmoid,
+    /// `clamp(-x, -1, 1)` — the saturating form of negation.
+    SaturatingInverse,
+    /// `min(|x|, 1)` — the saturating form of absolute value.
+    SaturatingAbs,
+    /// `clamp(x, 0, 1)` — ReLU capped at one.
+    SaturatingRelu,
+}
+
+impl ActivationFunction {
+    pub const ALL: [Self; 10] = [
+        Self::Tanh,
+        Self::SaturatingLinear,
+        Self::Step,
+        Self::Sin,
+        Self::Cos,
+        Self::Gaussian,
+        Self::Sigmoid,
+        Self::SaturatingInverse,
+        Self::SaturatingAbs,
+        Self::SaturatingRelu,
+    ];
+}
+
+/// Maximum number of neuromodulatory feedback channels. Per-neuron receptor
+/// gains are stored as a fixed array so `HiddenNodeGene` stays `Copy`; only the
+/// first `feedback_channel_count` entries (set by search config) are used.
+pub const MAX_FEEDBACK_CHANNELS: usize = 16;
+
+pub fn zero_feedback_receptors() -> [f32; MAX_FEEDBACK_CHANNELS] {
+    [0.0; MAX_FEEDBACK_CHANNELS]
 }
 
 /// Heritable hidden-node parameters keyed by a stable structural identity.
@@ -774,10 +837,19 @@ pub struct HiddenNodeGene {
     pub id: GeneNodeId,
     pub bias: f32,
     pub log_time_constant: f32,
-    /// Signed gain for the global reward-prediction-error broadcast. A zero
-    /// receptor leaves this neuron insensitive to neuromodulatory feedback.
+    /// Heritable transfer function applied to this neuron's pre-activation
+    /// state. Tanh reproduces the legacy substrate exactly.
     #[serde(default)]
-    pub neuromodulatory_receptor: f32,
+    pub activation_fn: ActivationFunction,
+    /// Signed postsynaptic gain for the global reward-prediction-error pulse.
+    /// A zero receptor makes incoming synapses insensitive to that third
+    /// plasticity factor without altering ordinary neural activation.
+    pub plasticity_receptor: f32,
+    /// Evolvable per-channel receptor gains for the neuromodulatory feedback
+    /// signal. All zero (neutral) means this neuron ignores every channel, so
+    /// hidden plasticity reduces to the output-only baseline.
+    #[serde(default = "zero_feedback_receptors")]
+    pub feedback_receptors: [f32; MAX_FEEDBACK_CHANNELS],
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -823,18 +895,21 @@ impl OrganismGenome {
                     id: seed_hidden_gene_node_id(0),
                     bias: 0.0,
                     log_time_constant: 0.0,
-                    neuromodulatory_receptor: 0.0,
+                    activation_fn: ActivationFunction::default(),
+                    plasticity_receptor: 0.0,
+                    feedback_receptors: zero_feedback_receptors(),
                 }],
                 action_biases: vec![0.0; action_count],
                 value_bias: 0.0,
                 edges: Vec::new(),
+                feedback_channels: Vec::new(),
             },
         }
     }
 }
 
 /// Heritable synapse gene: pure wiring + weight. Runtime plasticity state
-/// (eligibility, pending coactivation) lives only on the expressed
+/// (eligibility, pending eligibility) lives only on the expressed
 /// [`SynapseEdge`].
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub struct SynapseGene {
@@ -860,6 +935,9 @@ pub struct SynapseEdge {
     #[serde(default)]
     pub pre_action_index: Option<u32>,
     pub post_inter_index: Option<u32>,
+    /// Expression-time cache of the postsynaptic hidden neuron's signed
+    /// plasticity receptor. Output and value targets use one.
+    pub post_plasticity_receptor: f32,
     /// Stable inherited component copied from the expressed genome. Runtime
     /// learning changes `weight`; retention pulls that learned displacement
     /// back toward this baseline without altering the genome.
@@ -867,13 +945,15 @@ pub struct SynapseEdge {
     pub inherited_weight: f32,
     pub weight: f32,
     pub plasticity_coefficient: f32,
+    /// Local e-prop state derivative for synapses into leaky hidden neurons.
+    /// This follows postsynaptic dynamics without a backward graph traversal.
+    pub eligibility_state: f32,
     #[serde(default)]
     pub eligibility: f32,
-    // `default` (not `skip`): normally consumed+zeroed the same tick it is set,
-    // but a gestating organism's post-commit plasticity is skipped, so a nonzero
-    // Persisted because it is live plasticity state carried between ticks.
-    #[serde(default)]
-    pub pending_coactivation: f32,
+    /// Current-tick local sensitivity waiting for the outcome-derived third
+    /// factor. This staging field bridges world intent evaluation and the
+    /// post-commit plasticity phase.
+    pub pending_eligibility: f32,
 }
 
 fn default_eligibility_retention() -> f32 {
@@ -929,9 +1009,26 @@ pub struct InterNeuronState {
     #[serde(default)]
     pub state: f32,
     pub alpha: f32,
-    /// Evolvable sensitivity to the previous signed reward-prediction error.
+    /// Runtime copy of the heritable transfer function.
     #[serde(default)]
-    pub neuromodulatory_receptor: f32,
+    pub activation_fn: ActivationFunction,
+    /// Evolvable signed sensitivity of incoming synaptic plasticity to the
+    /// global reward-prediction-error pulse.
+    pub plasticity_receptor: f32,
+    /// Fixed per-neuron sign row of a direct-feedback projection, packed one
+    /// bit per action (bit k set means +1, clear means -1). When a learner-
+    /// visible categorical target is revealed, this projects the full output
+    /// error vector into a scalar hidden learning signal without transporting
+    /// forward weights or running backpropagation. Derived deterministically
+    /// from the stable hidden-gene identity at expression time, so it is a
+    /// runtime-only field that is never serialized (keeping the wire schema
+    /// unchanged) and is recomputed on every expression.
+    #[serde(skip)]
+    pub feedback_mask: u32,
+    /// Runtime copy of the evolvable per-channel neuromodulatory receptor gains.
+    /// Recomputed from the gene at expression; never serialized.
+    #[serde(skip, default = "zero_feedback_receptors")]
+    pub feedback_receptors: [f32; MAX_FEEDBACK_CHANNELS],
     pub synapses: Vec<SynapseEdge>,
     #[serde(default)]
     pub output_synapse_start: usize,
@@ -963,9 +1060,9 @@ pub struct BrainState {
     /// One-hot efference copy of the action actually selected last tick.
     #[serde(default)]
     pub previous_action_activations: [f32; Symbol::COUNT],
-    /// Signed reward surprise broadcast on the next recurrent step.
-    #[serde(default)]
-    pub previous_prediction_error: f32,
+    /// Reward prediction produced by the most recent brain evaluation. World
+    /// simulation retains it until the post-action outcome is committed.
+    pub reward_prediction: f32,
     /// Runtime reward prediction bias and its decaying critic trace.
     #[serde(default)]
     pub value_bias: f32,
@@ -974,30 +1071,14 @@ pub struct BrainState {
     pub inherited_value_bias: f32,
     #[serde(default)]
     pub value_bias_eligibility: f32,
+    /// Current local sensitivity of the scalar reward-prediction bias waiting
+    /// to be folded into its eligibility trace after the outcome.
+    pub pending_value_bias_eligibility: f32,
+    /// Runtime copy of the evolvable neuromodulatory channel matrix (row-major
+    /// `channel*Symbol::COUNT + k`). Recomputed at expression; never serialized.
+    #[serde(skip)]
+    pub feedback_channels: Vec<f32>,
     pub synapse_count: u32,
-    /// Per-sensory-neuron EMA of activation used to center pending
-    /// coactivations (covariance rule). Length tracks `sensory.len()`.
-    //
-    // `default` (not `skip`): this is live plasticity state that carries across
-    // ticks, so a world blob must persist it for a byte-identical reload. The
-    // default keeps any legacy payload that omits it loadable (bootstrap will
-    // re-seed). Means appear in the server wire too — additive, ignored by the
-    // web client's brain normalizer.
-    #[serde(default)]
-    pub sensory_mean_activation: Vec<f32>,
-    /// Per-inter-neuron EMA of activation. Length tracks `inter.len()`.
-    #[serde(default)]
-    pub inter_mean_activation: Vec<f32>,
-    /// Per-action-neuron EMA of the squashed action logit, used to center the
-    /// covariance rule on inter→action edges. Length tracks `action.len()`.
-    #[serde(default)]
-    pub action_mean_activation: Vec<f32>,
-    /// True once the activation means have been bootstrapped to the live
-    /// activations on the brain's first plasticity pass. Neurons are never
-    /// added or removed after birth, so every mean initializes on the same
-    /// tick and one flag covers the whole brain.
-    #[serde(default)]
-    pub means_initialized: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -36,6 +36,22 @@ pub fn action_array_index(id: NeuronId) -> Option<usize> {
     (idx < ACTION_COUNT).then_some(idx)
 }
 
+/// Dense inter-neuron array index for an expressed inter-target synapse.
+/// Exact inverse of [`types::inter_neuron_id`]: hidden-node IDs live above
+/// `INTER_ID_BASE`, skipping the small action-ID island. Expression time
+/// guarantees every inter-group edge targets a valid hidden neuron, so this
+// is unchecked arithmetic rather than the validated `inter_index` fallback;
+// hot forward/plasticity loops rely on it.
+#[inline(always)]
+pub fn dense_inter_index(id: NeuronId) -> usize {
+    let raw = id.0;
+    if raw >= ACTION_ID_BASE {
+        (raw - ACTION_ID_BASE - types::Symbol::COUNT as u32) as usize
+    } else {
+        (raw - INTER_ID_BASE) as usize
+    }
+}
+
 pub fn constrain_weight(weight: f32) -> f32 {
     if weight == 0.0 {
         return SYNAPSE_STRENGTH_MIN;

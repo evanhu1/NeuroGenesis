@@ -75,11 +75,8 @@ fn print_help(out: &mut impl Write) -> Result<()> {
         "cli — deterministic task-ecology research CLI. JSON output by default.\n\
          \n\
          TASK ECOLOGY\n\
-         \x20 cli ecology reaction ...      direct-reaction environment\n\
-         \x20 cli ecology memory ...        bounded sequence-memory environment\n\
-         \x20 cli ecology next-token ...    basic next-token prediction environment\n\
-         \x20 cli ecology continual ...     basic continual-learning environment\n\
-         \x20 cli ecology renewable ...     renewable hidden-resource environment\n\
+         \x20 cli ecology next-token ...    English text acquisition environment\n\
+         \x20 cli ecology symbolic ...      English symbolic-compute environment\n\
          \x20 cli ecology analyze RESULT... compare persisted runs\n\
          \n\
          RUN OPTIONS\n\

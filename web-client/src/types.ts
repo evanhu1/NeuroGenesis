@@ -95,21 +95,39 @@ type SynapseEdgeOf<Id> = {
   pre_inter_index: number | null;
   pre_action_index: number | null;
   post_inter_index: number | null;
+  post_plasticity_receptor: number;
   inherited_weight: number;
   weight: number;
   plasticity_coefficient: number;
+  eligibility_state: number;
   eligibility: number;
-  pending_coactivation: number;
+  pending_eligibility: number;
 };
 
 export type ApiSynapseEdge = SynapseEdgeOf<ApiScalarId>;
 export type SynapseEdge = SynapseEdgeOf<NeuronId>;
 
+// Heritable per-neuron transfer function (weight-agnostic operator set).
+// Outputs lie in [-1, 1]; `saturating_*` are the saturating forms of the
+// unbounded originals, required by the recurrent substrate.
+export type ActivationFunction =
+  | 'tanh'
+  | 'saturating_linear'
+  | 'step'
+  | 'sin'
+  | 'cos'
+  | 'gaussian'
+  | 'sigmoid'
+  | 'saturating_inverse'
+  | 'saturating_abs'
+  | 'saturating_relu';
+
 export type HiddenNodeGene = {
   id: StableGeneId;
   bias: number;
   log_time_constant: number;
-  neuromodulatory_receptor: number;
+  activation_fn: ActivationFunction;
+  plasticity_receptor: number;
 };
 
 // Heritable connection identity is stable across structural mutation. Runtime
@@ -166,7 +184,8 @@ type InterNeuronStateOf<Id> = {
   neuron: NeuronStateOf<Id>;
   state: number;
   alpha: number;
-  neuromodulatory_receptor: number;
+  activation_fn: ActivationFunction;
+  plasticity_receptor: number;
   synapses: SynapseEdgeOf<Id>[];
   output_synapse_start: number;
 };
@@ -191,15 +210,12 @@ type BrainStateOf<Id> = {
   action_feedback_synapses: SynapseEdgeOf<Id>[];
   previous_inter_activations: number[];
   previous_action_activations: number[];
-  previous_prediction_error: number;
+  reward_prediction: number;
   value_bias: number;
   inherited_value_bias: number;
   value_bias_eligibility: number;
+  pending_value_bias_eligibility: number;
   synapse_count: number;
-  sensory_mean_activation: number[];
-  inter_mean_activation: number[];
-  action_mean_activation: number[];
-  means_initialized: boolean;
 };
 
 export type ApiBrainState = BrainStateOf<ApiScalarId>;

@@ -37,37 +37,36 @@ conversion from task success events to reproductive tickets.
 reproduction, exact elite retention, tournament parent selection, asexual
 mutation, audits, and artifacts. Reproduction never occurs inside evaluation.
 
-## Included tasks
+## Active tasks
 
-- `reaction`: observe `a`-`d` or `end`; emit the same symbol. Each correct
-  reaction is one atomic success event.
-- `memory`: receive no observation; discover a hidden `a`-`h` sequence over
-  repeated rewarded learning attempts, then solve it in a frozen greedy probe.
-  Learning attempts emit no success events. Each correct final-probe position
-  is one symmetric atomic success event, while the trial outcome records exact
-  sequence success.
-- `next-token`: teacher-force the complete fixed English snippet from a boundary
-  token and predict the next character at every prefix position. Four complete
-  supervised passes retain learned weights while resetting recurrent dynamics
-  at pass boundaries. A final dynamics reset begins a plasticity-frozen greedy
-  probe; each correct probe prediction is a success event.
-- `continual`: receive no observation during one uninterrupted lifetime. The
-  rewarded `a`-`h` action switches to a different action every deterministic
-  32--96 ticks. Every correct action is one atomic success event; neural
-  dynamics and learned weights are never reset by the task.
-- `renewable`: receive no observation; discover the current hidden `a`-`h`
-  target. Correct actions emit success events; consuming the configured stock
-  deterministically renews the target.
+- `next-token`: the English-acquisition substrate. Teacher-forced next-character
+  prediction over a fixed snippet or (`--generalize`) freshly generated text;
+  predictive-coding mode gives a fully self-supervised bottomless learning
+  signal. Sealed panels never repeat training text, so genomes must acquire
+  arbitrary novel text within their own lifetimes. Also the substrate for
+  adversarial forging (`--coevolve true`): an evolving word-distribution
+  population (per-word weights + long-range repetition) biases half of each
+  training panel while audits stay on the neutral generator.
+- `symbolic`: the north-star task. English instruction words (`copy`, `reve`,
+  `rota`, `dupl`, `cyph`) name string operations; each instance teaches one
+  operation through demonstration pairs (`reve cat tac`) and probes with fresh
+  query words. Demo streams never repeat verbatim, so readout memorization
+  cannot fit even the training data — execution requires a character register
+  (word-span memory) plus instruction latching.
+
+## Retired tasks (2026-08-25 cleanup)
+
+`reaction`, `memory`, and `continual` were legacy capability benchmarks whose
+gates were re-established (99.7% / 92–98% / 93.7% sealed) and which no longer
+serve the symbolic-computation-in-English direction. Their evidence and
+decision history remain in `research/`; the environments were removed from
+the codebase.
 
 ## Adding a task
 
 1. Add a module under `task-library/src/` implementing `SymbolicTask`.
-2. Keep all task state private and deterministic from the supplied seed and
-   index.
-3. Define success events as facts of the environment, independent of any
-   optimizer.
-4. Register only CLI parsing and construction in `cli/src/ecology.rs`.
-5. Use `cli ecology <task> plan` before running it.
-
-No task-specific evaluator, optimizer, brain helper, or mutation path should be
-added.
+2. Validate everything in `validate()`; derive panels deterministically from
+   `(panel_seed, instance)`.
+3. Register the module in `task-library/src/lib.rs` and wire the CLI dispatch
+   (`cli/src/ecology.rs`), presets, help text, and `docs/cli.md`.
+4. Success events must be atomic and independent (no prefix privileging).

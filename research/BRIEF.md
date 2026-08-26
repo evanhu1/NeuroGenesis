@@ -1,107 +1,142 @@
-# Current objective: general learning in symbolic task ecologies
+# NeuroGenesis research brief
 
-## Architecture bar
+## Goal
 
-A task may define only its observable environment, legal actions, reward,
-atomic success events, semantic trial boundaries, deterministic instances, and
-metrics. It may not install the representation or memory strategy needed to
-solve itself, inspect genomes or neurons, invoke learning, allocate offspring,
-or select and mutate parents.
+**Evolve brains capable of symbolic computation, grounded in English, so that
+researcher and organism share a common language.**
 
-A brain change is admissible only when the canonical substrate cannot express
-the required behavior, evolution demonstrably cannot find it, or the existing
-route is cripplingly inefficient for a general reason. Search and learner
-interventions must remain general across tasks.
+Concretely: populations of small recurrent plastic brains whose entire sensor
+and motor interface is lowercase English text (`a`–`z`, space, `end`). A brain
+must acquire — within its own lifetime, from in-stream demonstrations —
+symbol-manipulation operations whose names are English words (`copy`, `reve`,
+`rota`, `dupl`, `cyph`), then execute them on fresh queries it has never seen.
+The endgame is a lineage that reads English instructions we write and computes
+what they mean, with nothing hand-wired between us and it.
 
-## Clean baseline
+### Subgoals (staged milestones)
 
-All active symbolic environments live in `task-library` and implement one
-brain- and optimizer-independent contract. `evolution::TaskEcology` is the sole
-adapter: it owns genome expression, agent state, action sampling, learning,
-evaluation panels, controls, and conversion of task success events into
-reproductive tickets. The asexual ecology owns equal-panel evaluation, a finite
-population-sized offspring pool, exact elite retention, fixed-K tournament
-selection, bounded reversible mutation, audits, and artifacts. Reproduction
-never occurs inside evaluation.
+| Stage | Milestone | Gate |
+|---|---|---|
+| **S1** | Fixed vocabulary: five English-named string operations taught by demonstration, executed on fresh queries | ≥90% sealed char accuracy on causal ops; reverse gap quantified |
+| **S2** | Grounding by demonstration: forge scrambles name↔operation bindings per instance so the English name is arbitrary and meaning must be induced from demos | ≥80% sealed under scrambled bindings |
+| **S3** | Open-ended vocabulary: the adversarial forge *invents* new operations; brains must acquire never-before-seen operation kinds within one lifetime | sustained acquisition of forge-invented ops across a run |
+| **S4** | Composition: instruction *sequences* (programs) — `reve rota cat tac` — executed as chained transformations | above-chance exact-program rate |
 
-There is no scalar fitness, speciation, crossover, target-species quota,
-task-authored representation, topology reward, novelty reward, or implicit
-efficiency metric. Competition for finite offspring slots supplies relative
-pressure. A zero-resource generation is extinct.
+Parallel capability milestone: **working memory**. S1 baselines already
+localize the binding constraint to a character register (hold a word across
+~6 ticks) plus instruction latching. Every stage above depends on it.
 
-The task library currently contains:
+### Constraints (inviolable)
 
-- **Basic reaction:** copy the observed `a`-`d`/`end` symbol; each correct
-  reaction is one success event.
-- **Basic memory:** infer a hidden `a`-`h` sequence over repeated attempts with
-  zero symbolic input, then solve it in a frozen greedy probe. Learning attempts
-  emit no reproductive events; each correct final-probe position is one
-  symmetric success event. The task supplies neither a clock nor a memory
-  representation.
-- **Basic next-token prediction:** teacher-force the complete fixed English
-  snippet from a boundary token and predict the next character at every prefix
-  position. Four complete supervised passes retain learned weights while
-  resetting recurrent dynamics at pass boundaries. A final reset begins a
-  plasticity-frozen greedy probe; each correct probe prediction is a success
-  event.
-- **Basic continual learning:** track a hidden rewarded `a`-`h` action through
-  deterministic 32--96 tick reversals during one uninterrupted lifetime; every
-  correct action is one success event and the task never resets agent state.
-- **Renewable resource:** infer a hidden `a`-`h` target in a continuous
-  lifetime; correct actions consume renewable stock and emit success events.
+1. **Co-evolutionary EA structure.** Open-endedness comes from the competitive
+   environment evolving alongside the brains — a difficulty ratchet that no
+   human authors. The forge side must be under selection (fitness derived
+   from brain failure/progress), deterministic, and instrumented. Hand-tuned
+   difficulty schedules are for calibration only, never the mechanism.
+2. **Bottomless learning signal.** Lifetime learning is self-supervised
+   prediction error (predictive coding): the learner's own prediction against
+   the next observation. No saturating scalar reward, no teacher signal the
+   environment did not naturally emit, no BPTT, no transported forward
+   weights.
+3. **Architecture bar.** Tasks define environment semantics only — no
+   task-installed representations, no inspection of genomes or neurons, no
+   selection coupling inside evaluation. One generic adapter
+   (`evolution::TaskEcology`) is the only bridge. Search remains
+   fitness-scalar-free: atomic task success events compete for finite
+   offspring slots.
+4. **Scaling imperative.** The path to symbolic competence runs through
+   massively larger brains than today's ~50-node/900-edge winners. Every
+   substrate change must keep open: indirect/region-based encodings (compact
+   genomes expressing large connectomes), lifetime structural plasticity
+   (prune-and-regrow by local signals), and batch-friendly/GPU-portable
+   evaluation. Survey and plan: [scaling beyond NEAT]
+   (archive/reports/2026-08-25-scaling-beyond-neat.md).
+5. **Determinism.** Fixed config + seed = bit-identical results. All
+   tie-breaking by organism ID ordering; all sampling from hash-mixed seeds.
+   Optimizations must be verified bit-exact (or documented-exact for
+   multi-instance diagnostic floats) before adoption.
+6. **The hex-grid world simulator stays.** `world-sim` (with its Axum server
+   and web client) is the ecological substrate and long-term home for
+   grounding beyond text; the symbolic track is its cognition engine, not a
+   replacement for it.
 
-## Established evidence
+## Current system inventory
 
-The former basic-reaction benchmark saturated at exact `544/544` training and
-unseen holdout copying. The former basic-memory benchmark reached 92.822%
-sealed exact accuracy at length four in its calibrated legacy evaluator, but
-transfer collapsed at longer lengths; it established bounded learnability, not
-a general sequence learner. Those outcomes remain historical evidence. The
-old task-specific evaluators and NEAT/speciation/CMA-ES paths have been removed;
-reaction and memory now remain only as environments loadable by the common
-ecology. As a contract-parity check, the historical solved memory champion
-reaches 97.253% sealed character accuracy and 89.258% sealed exact accuracy
-through the new common adapter on a fresh deterministic panel. A population-256
-run of the clean asexual ecology then reached 92.969% sealed character accuracy
-and 73.584% sealed exact accuracy by generation 250, re-establishing the memory
-character-accuracy gate without the legacy optimizer. With the 100-target
-default, population 1,024 reached 98.0% sealed character accuracy and 92.0%
-sealed exact accuracy by generation 250. At a fixed 100 generations, training
-exact accuracy increased from 13.5% at population 256 to 73.0% at population
-8,192, but sealed exact accuracy peaked at 62.0% for population 4,096 and fell
-to 59.5% at 8,192. Breadth therefore scales search on the fixed training panel;
-the small fixed panel, not raw search capacity, limits monotonic generalization.
+- `task-library`: `next_token_prediction` (English acquisition; forge
+  substrate) and `symbolic_compute` (north-star task). Legacy
+  reaction/memory/continual benchmarks retired 2026-08-25 after their gates
+  were re-established; history in `research/`.
+- `evolution`: the generic task adapter + asexual ticket ecology
+  (`run_resource_ecology`) and adversarial co-evolution
+  (`co_ecology`: word-distribution forge population with repetition knob,
+  champion-forge panel biasing, hardness telemetry).
+- `brain`: WANN-NEAT genomes (heritable activation functions, minimal
+  founders), expression, leaky-integrator evaluation, three-factor local
+  plasticity (eligibility × postsynaptic signal), predictive-coding mode.
+- `cli`: `ecology` (next-token, symbolic, evaluate, analyze, --coevolve) and
+  `world` (stateless hex-grid world-as-file tools, TUI, sweeps).
+- `world-sim`/`sim-server`/`web-client`/`metrics`/`views`: the deterministic
+  hex-grid ecology and its human-facing stack, unchanged by the symbolic track.
+- Performance state: ~1.35 G-synops/s aggregate on 14 cores (~80% utilization
+  ceiling at current job sizes; rayon join plumbing is the residual); four
+  bit-exact brain optimizations in place (−26% wall on E1-scale runs);
+  `target-cpu=native` gives an additional −8% and is verified bit-exact.
 
-The clean basic-continual-learning environment reached 92.984% sealed action
-accuracy at population 256 by generation 100, versus 12.112% with plasticity
-disabled. Its selected brain has 10 hidden nodes, 41 enabled edges, and no
-orphan nodes. This re-establishes continual reversal competence through the
-common task adapter and ecology.
+## Established evidence (what we know)
 
-The corrected next-token learner trains on all 44 targets of the fixed pangram
-for four passes, then runs a frozen greedy probe. Extending the generic
-plastic readout from the complete sensory-plus-hidden representation to every
-legal output removed a crippling representation bottleneck. At seed 101,
-population 256 reached 95.455% sealed probe accuracy by generation 500, and
-population 1,024 reached exact 44/44 by generation 374. The exact winner fell
-to 2/44 with plasticity disabled, 43/44 without action efference copy, and
-41/44 without prediction-error feedback. This establishes rapid mastery of the
-training snippet, not held-out language generalization; evolution repeatedly
-sees the same snippet and may specialize its inherited recurrent features.
-The complete post-hoc discovery record is [archived here](archive/experiments/2026-07-19-basic-next-token-learning-milestone.md).
+1. **The learning signal is bottomless.** Self-supervised dose-response on the
+   hard 150-target passage is linear through 4× dose: 95→101→105→112 per 150
+   at 32/64/96/192 passes (p512/g150, all-time high; scalar reward saturates
+   at 110 even at g1000). Frozen champions acquire never-seen English text at
+   78% vs 3.57% chance; inherited priors contribute only ~17 points.
+2. **Champions already integrate multi-character context.** Exact-task Markov
+   ceilings: k=1 → 64/150, k=2 → 120, k=3 → 141. Winners at 112 exceed k=1 via
+   leaky-membrane context, without a single recurrent edge. "0% recurrent
+   edges" ≠ "no temporal computation."
+3. **Open-ended environment pressure works mechanically.** Evolved brains
+   acquire arbitrary novel text (63–73% sealed on unseen generated snippets);
+   selection rewards acquisition, not memorization.
+4. **Co-evolution v1 failed in the informative way.** Forge fitness =
+   absolute brain failure saturates at hardness 1.0 the moment difficulty
+   exceeds lifetime learnability — every forge ties, gradient dies, and
+   co-evolved arms trail static controls 52–60% vs 73.7% (half of every
+   lifetime wasted on unlearnable text). V2 spec: relative forge ranking,
+   adaptive length knob anchored to demonstrated competence, progress-shaped
+   fitness (learnable-with-effort, not impossible).
+5. **S1 symbolic baselines: everything fails at ~4–6% vs 3.7% chance —
+   including copy.** Not a bug (traced end-to-end). Two structural causes:
+   (a) demo streams never repeat verbatim, so readout memorization cannot
+   even fit training data — the first direct computation-vs-memorization
+   measurement (learning accuracy ~8% on symbolic demos vs 36% on repeating
+   text at equal dose); (b) execution requires a character register
+   (word-span memory) plus instruction latching, which the substrate lacks
+   without recurrent working-memory codes.
+6. **Dose-response may not transfer from memorization to computation.** The
+   open question separating S1's two failure hypotheses: insufficient
+   lifetime data (more passes fix it) vs register-span wall (only structural
+   change fixes it). The launched wl2/lp32 arms answer this; they were
+   aborted at teardown and must be rerun.
 
-The renewable environment previously established that the generic stable-plus-
-fast plasticity substrate and general lifetime-learning readout can exceed 93%
-sealed action accuracy in population-256, 250-generation runs. The clean
-task-library cutover must now preserve reaction and renewable competence while
-measuring whether symmetric final-probe resources can drive discovery of a
-strong bounded learner.
+## Active work
 
-## Success criterion
+1. **S1 diagnosis completion** (rerun ES1b copy@lp32, ES5 copy@wl2, ES6
+   mixed@wl2+lp32): separate dose-insufficiency from memory-span wall.
+   - wl2 passes & wl4 fails → memory-span localized → re-test
+     delay-relay/self-recurrent machinery; push lifetime structural learning.
+   - wl2+lp32 still fails → substrate needs structural learning before
+     symbolic ops are tractable at all → that becomes the top investment.
+2. **Forge fitness v2**: relative ranking + adaptive length knob +
+   progress-shaped fitness, per the E3 post-mortem.
+3. **Lifetime structural plasticity** (prune-and-regrow by eligibility
+   magnitude): the one lever that is simultaneously the missing cognition
+   rung (recurrent working-memory codes that lifetime learning can form) and
+   the scaling mechanism (sparsity bounds compute as capacity grows).
+4. **Deep-dose gate chase** (secondary): hard passage at ~480 passes
+   projected to cross 135/150 if linearity holds — a memory-capability proxy
+   worth one confirmation run when convenient.
 
-The next baseline is established when the same task adapter, search process,
-and brain machinery achieve at least 90% sealed primary accuracy on reaction,
-memory, basic next-token prediction, basic continual learning, and renewable
-environments without task-specific evaluator or learner code, while breadth
-scales in expectation with population and training depth scales without
-systematic regression with generations.
+## Records
+
+Experiment index and decision ledger: [INDEX.md](INDEX.md). Complete numerical
+history lives in the linked archive records; generated artifacts under
+`artifacts/research/runs/` (git-ignored).

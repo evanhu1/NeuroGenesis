@@ -718,7 +718,7 @@ fn brain_synapses(
                     "timing": e.timing,
                     "weight": round3(e.weight),
                     "eligibility": round3(e.eligibility),
-                    "pending": round3(e.pending_coactivation),
+                    "pending": round3(e.pending_eligibility),
                 })
             })
             .collect();
@@ -751,7 +751,7 @@ fn brain_synapses(
             timing_label(e.timing),
             e.weight,
             e.eligibility,
-            e.pending_coactivation
+            e.pending_eligibility
         )?;
     }
     Ok(())

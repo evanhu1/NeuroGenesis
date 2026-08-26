@@ -1,3 +1,4 @@
+pub mod activation;
 mod evaluation;
 mod expression;
 pub mod genome;
@@ -10,7 +11,7 @@ use crate::genome::inter_alpha_from_log_time_constant;
 #[cfg(feature = "profiling")]
 use crate::profiling::BrainStage;
 use crate::topology::{
-    action_neuron_id, constrain_weight, inter_index, inter_neuron_id,
+    action_neuron_id, constrain_weight, inter_neuron_id,
     refresh_output_synapse_starts_and_count,
 };
 #[cfg(feature = "profiling")]
@@ -26,12 +27,12 @@ pub use evaluation::{evaluate_brain, evaluate_brain_state, BrainEvalContext};
 #[cfg_attr(not(test), allow(unused_imports))]
 pub use expression::{express_genome, make_action_neuron, make_sensory_neuron};
 pub use learning::{
-    apply_immediate_action_reward, apply_target_prediction_error, apply_temporal_action_reward,
-    reset_dynamics_preserving_weights, ImmediateLearningNormalization, ImmediateLearningReport,
-    ImmediateLearningRequest, TargetPredictionLearningRequest, TemporalLearningReport,
-    TemporalLearningRequest,
+    accumulate_synaptic_eligibilities, apply_three_factor_learning,
+    reset_episode_state_preserving_weights, store_action_efference_copy, ActionLearningSignal,
+    EligibilityNormalization, EligibilityRequest, ThreeFactorLearningReport,
+    ThreeFactorLearningRequest,
 };
-pub use plasticity::{apply_runtime_weight_updates, compute_pending_coactivations};
+pub use plasticity::{accumulate_runtime_eligibilities, apply_runtime_weight_updates};
 
 mod plasticity;
 
@@ -68,6 +69,9 @@ pub struct BrainScratch {
     pub inter_inputs: Vec<f32>,
     pub prev_inter: Vec<f32>,
     pub inter_activations: Vec<f32>,
+    pub inter_local_gains: Vec<f32>,
+    pub inter_activation_gains: Vec<f32>,
+    pub inter_state_retentions: Vec<f32>,
     pub action_probabilities: [f32; ACTION_COUNT],
 }
 
@@ -77,6 +81,9 @@ impl BrainScratch {
             inter_inputs: Vec::with_capacity(32),
             prev_inter: Vec::with_capacity(32),
             inter_activations: Vec::with_capacity(32),
+            inter_local_gains: Vec::with_capacity(32),
+            inter_activation_gains: Vec::with_capacity(32),
+            inter_state_retentions: Vec::with_capacity(32),
             action_probabilities: [0.0; ACTION_COUNT],
         }
     }

@@ -4,10 +4,10 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use brain::{
-    apply_immediate_action_reward, apply_target_prediction_error, apply_temporal_action_reward,
-    evaluate_brain_state, express_genome, reset_dynamics_preserving_weights, BrainEvalContext,
-    BrainScratch, ImmediateLearningNormalization, ImmediateLearningRequest,
-    TargetPredictionLearningRequest, TemporalLearningRequest,
+    accumulate_synaptic_eligibilities, apply_three_factor_learning, evaluate_brain_state,
+    express_genome, reset_episode_state_preserving_weights, store_action_efference_copy,
+    ActionLearningSignal, BrainEvalContext, BrainScratch, EligibilityNormalization,
+    EligibilityRequest, ThreeFactorLearningRequest,
 };
 use serde::{Deserialize, Serialize};
 use task_library::SymbolicTask;
@@ -21,11 +21,9 @@ const ACTION_DOMAIN: u64 = 0x4143_5449_4f4e_4452;
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum LearningRule {
-    Disabled,
-    ImmediatePolicy,
-    TargetPredictionError,
     #[default]
-    TemporalPredictionError,
+    RewardPredictionError,
+    CategoricalPredictionError,
 }
 
 #[derive(Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -44,7 +42,7 @@ pub enum LearningNormalization {
     Nlms,
 }
 
-impl From<LearningNormalization> for ImmediateLearningNormalization {
+impl From<LearningNormalization> for EligibilityNormalization {
     fn from(value: LearningNormalization) -> Self {
         match value {
             LearningNormalization::None => Self::None,
@@ -67,6 +65,21 @@ pub struct AgentEvaluationConfig {
     pub learning_normalization: LearningNormalization,
     pub reset_dynamics_at_trial_boundary: bool,
     pub audit_interval: u32,
+    /// Opt-in direct feedback alignment: hidden neurons learn from a fixed
+    /// random projection of the categorical output error instead of the scalar
+    /// reward surprise. Only active on tasks that reveal teaching targets.
+    #[serde(default)]
+    pub hidden_categorical_feedback: bool,
+    /// Use leaky-integrator neuron dynamics with the local e-prop eligibility
+    /// state-derivative. When false, neurons are instantaneous and eligibility
+    /// is the simpler scalar presynaptic-times-gain trace (the pre-e-prop
+    /// learner). Defaults to true.
+    #[serde(default = "default_true")]
+    pub temporal_credit_leaky: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 impl Default for AgentEvaluationConfig {
@@ -78,12 +91,14 @@ impl Default for AgentEvaluationConfig {
             training_rollouts: 1,
             development_rollouts: 1,
             sealed_rollouts: 1,
-            learning_rule: LearningRule::TemporalPredictionError,
+            learning_rule: LearningRule::RewardPredictionError,
             action_selection: ActionSelection::Sampled,
             exploration_temperature: 1.0,
             learning_normalization: LearningNormalization::None,
             reset_dynamics_at_trial_boundary: true,
             audit_interval: 25,
+            hidden_categorical_feedback: false,
+            temporal_credit_leaky: true,
         }
     }
 }
@@ -118,7 +133,16 @@ pub struct SymbolicEcologyMetrics {
     pub mean_reward_prediction: f64,
     pub mean_absolute_applied_delta: f64,
     pub clipped_update_count: u64,
-    pub edge_update_count: u64,
+    pub edge_evaluation_count: u64,
+    pub internal_edge_evaluation_count: u64,
+    pub action_edge_evaluation_count: u64,
+    pub value_edge_evaluation_count: u64,
+    pub nonzero_internal_edge_update_count: u64,
+    pub nonzero_action_edge_update_count: u64,
+    pub nonzero_value_edge_update_count: u64,
+    pub internal_applied_absolute_delta: f64,
+    pub action_applied_absolute_delta: f64,
+    pub value_applied_absolute_delta: f64,
     pub brain_synapse_operations: u64,
 }
 
@@ -126,8 +150,6 @@ pub struct SymbolicEcologyMetrics {
 pub struct SymbolicEcologyAudit {
     pub cohort: String,
     pub primary: SymbolicEcologyMetrics,
-    pub efference_copy_off: SymbolicEcologyMetrics,
-    pub prediction_error_feedback_off: SymbolicEcologyMetrics,
 }
 
 #[derive(Clone)]
@@ -141,7 +163,7 @@ impl<T> TaskEcology<T> {
     }
 }
 
-struct Instance<S> {
+pub(crate) struct Instance<S> {
     task: S,
     brain: BrainState,
     sample_seed: u64,
@@ -150,13 +172,23 @@ struct Instance<S> {
 pub struct TaskEvaluationState<S> {
     instances: Vec<Instance<S>>,
 }
-#[derive(Clone, Copy)]
-enum Condition {
-    Primary,
-    EfferenceCopyOff,
-    PredictionErrorFeedbackOff,
-}
 
+impl<S> TaskEvaluationState<S> {
+    /// Crate-internal constructors/accessors for sibling modules that compose
+    /// panels from multiple sub-evaluations (co-evolutionary forge scoring).
+    pub(crate) fn empty() -> Self {
+        Self {
+            instances: Vec::new(),
+        }
+    }
+    pub(crate) fn instances_mut(&mut self) -> &mut Vec<Instance<S>> {
+        &mut self.instances
+    }
+    /// Move another state's instances into this one (panel composition).
+    pub(crate) fn append_from(&mut self, other: &mut Self) {
+        self.instances.append(&mut other.instances);
+    }
+}
 impl<T: SymbolicTask> GenomeTask for TaskEcology<T> {
     fn sensor_enabled(&self, _sensor: SensoryReceptor) -> bool {
         self.task.observes_symbols()
@@ -168,16 +200,129 @@ impl<T: SymbolicTask> GenomeTask for TaskEcology<T> {
         true
     }
     fn temporal_credit_enabled(&self) -> bool {
-        !matches!(self.agent.learning_rule, LearningRule::Disabled)
+        true
     }
     fn value_prediction_enabled(&self) -> bool {
-        matches!(
-            self.agent.learning_rule,
-            LearningRule::TemporalPredictionError
-        )
+        self.task.uses_value_critic()
+    }
+    fn predictive_coding_enabled(&self) -> bool {
+        !self.task.uses_value_critic()
     }
     fn lifetime_learning_enabled(&self) -> bool {
-        !matches!(self.agent.learning_rule, LearningRule::Disabled)
+        true
+    }
+}
+
+impl<T: SymbolicTask + Clone> TaskEcology<T> {
+    /// Population-wide flattened evaluation: one flat parallel pass over every
+    /// (genome, instance) unit in the generation instead of a join per genome.
+    /// Integer metric fields merge exactly; per-tick f64 diagnostics may differ
+    /// in the last ulp from per-genome sequential accumulation (documented).
+    pub(crate) fn evaluate_population_flat(
+        &self,
+        genomes: &[&OrganismGenome],
+        ids: &[u64],
+        run_seed: u64,
+        generation: u32,
+        pool: &rayon::ThreadPool,
+    ) -> Result<Vec<PopulationOutcome<SymbolicEcologyMetrics>>> {
+        use rayon::prelude::*;
+        // Phase A: build every lifetime's panel (expression + task states).
+        let mut states = pool.install(|| {
+            genomes
+                .par_iter()
+                .zip(ids)
+                .map(|(genome, id)| {
+                    self.initialize_lifetime(genome, *id, run_seed, generation)
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
+
+        // Phase B: drain instances into one flat schedule of evaluation units.
+        let mut flat: Vec<(usize, Instance<T::State>)> = Vec::with_capacity(
+            states.iter().map(|s| s.instances.len()).sum(),
+        );
+        for (genome_index, state) in states.iter_mut().enumerate() {
+            for instance in state.instances.drain(..) {
+                flat.push((genome_index, instance));
+            }
+        }
+
+        // Phase C: evaluate all units in a single work-stealing pass.
+        let partials: Vec<(usize, SymbolicEcologyMetrics, InstanceScalars)> = pool.install(|| {
+            flat.par_iter_mut()
+                .map(|(genome_index, instance)| {
+                    let mut metrics = SymbolicEcologyMetrics::default();
+                    let mut scalars = InstanceScalars::default();
+                    self.evaluate_one_instance(
+                        genomes[*genome_index],
+                        instance,
+                        &mut metrics,
+                        &mut scalars,
+                    );
+                    (*genome_index, metrics, scalars)
+                })
+                .collect()
+        });
+
+        // Phase D: merge per genome, strictly in genome order.
+        let per_genome_units: Vec<Vec<usize>> = {
+            let mut acc: Vec<Vec<usize>> = vec![Vec::new(); genomes.len()];
+            for (unit_index, (genome_index, _, _)) in partials.iter().enumerate() {
+                acc[*genome_index].push(unit_index);
+            }
+            acc
+        };
+        let mut outcomes = Vec::with_capacity(genomes.len());
+        for unit_indices in per_genome_units { 
+            let mut metrics = SymbolicEcologyMetrics {
+                instances: unit_indices.len(),
+                ..Default::default()
+            };
+            let mut totals = InstanceScalars::default();
+            let mut probe_sum = 0.0_f64;
+            for &unit_index in &unit_indices {
+                let (_, part, scalars) = &partials[unit_index];
+                metrics.brain_synapse_operations += part.brain_synapse_operations;
+                metrics.ticks += part.ticks;
+                metrics.correct += part.correct;
+                metrics.learning_ticks += part.learning_ticks;
+                metrics.learning_correct += part.learning_correct;
+                metrics.probe_ticks += part.probe_ticks;
+                metrics.probe_correct += part.probe_correct;
+                metrics.mean_probe_target_probability += part.mean_probe_target_probability;
+                metrics.completed_trials += part.completed_trials;
+                metrics.successful_trials += part.successful_trials;
+                metrics.resource_units += part.resource_units;
+                metrics.edge_evaluation_count += part.edge_evaluation_count;
+                metrics.internal_edge_evaluation_count += part.internal_edge_evaluation_count;
+                metrics.action_edge_evaluation_count += part.action_edge_evaluation_count;
+                metrics.value_edge_evaluation_count += part.value_edge_evaluation_count;
+                metrics.nonzero_internal_edge_update_count +=
+                    part.nonzero_internal_edge_update_count;
+                metrics.nonzero_action_edge_update_count +=
+                    part.nonzero_action_edge_update_count;
+                metrics.nonzero_value_edge_update_count += part.nonzero_value_edge_update_count;
+                metrics.internal_applied_absolute_delta += part.internal_applied_absolute_delta;
+                metrics.action_applied_absolute_delta += part.action_applied_absolute_delta;
+                metrics.value_applied_absolute_delta += part.value_applied_absolute_delta;
+                metrics.clipped_update_count += part.clipped_update_count;
+                probe_sum += scalars.probe_sequence_probability_sum;
+                totals.rewards += scalars.rewards;
+                totals.errors += scalars.errors;
+                totals.predictions += scalars.predictions;
+                totals.deltas += scalars.deltas;
+            }
+            Self::finalize_metrics(&mut metrics, &mut probe_sum, &mut totals);
+            outcomes.push(PopulationOutcome {
+                reproductive_tickets: metrics.resource_units,
+                work: TaskWorkReport {
+                    brain_synapse_operations: metrics.brain_synapse_operations,
+                },
+                evaluation: metrics,
+            });
+        }
+        Ok(outcomes)
     }
 }
 
@@ -205,6 +350,26 @@ impl<T: SymbolicTask + Clone> ResourceEcologyTask for TaskEcology<T> {
     fn evaluation_lifetimes(&self) -> usize {
         self.agent.training_instances * self.agent.training_rollouts
     }
+    fn evaluate_population(
+        &self,
+        genomes: &[&OrganismGenome],
+        ids: &[u64],
+        run_seed: u64,
+        generation: u32,
+        pool: &rayon::ThreadPool,
+    ) -> Result<Vec<crate::task_adapter::PopulationOutcome<Self::LifetimeEvaluation>>> {
+        // The flat schedule pays for itself only when single panels are large
+        // enough that per-genome jobs strand workers (measured: population-wide
+        // flattening regressed symbolic ti=8 runs by ~5% from instance moves).
+        const MIN_FLAT_PANEL: usize = 32;
+        if self.agent.training_instances * self.agent.training_rollouts >= MIN_FLAT_PANEL {
+            self.evaluate_population_flat(genomes, ids, run_seed, generation, pool)
+        } else {
+            ResourceEcologyTask::evaluate_population_default(
+                self, genomes, ids, run_seed, generation, pool,
+            )
+        }
+    }
     fn validate(&self) -> Result<()> {
         self.task.validate()?;
         if !self.agent.exploration_temperature.is_finite()
@@ -214,6 +379,13 @@ impl<T: SymbolicTask + Clone> ResourceEcologyTask for TaskEcology<T> {
         }
         if self.agent.audit_interval == 0 {
             bail!("audit interval must be positive");
+        }
+        if matches!(
+            self.agent.learning_rule,
+            LearningRule::CategoricalPredictionError
+        ) && !self.task.reveals_teaching_targets()
+        {
+            bail!("categorical prediction learning requires learner-visible teaching targets");
         }
         if self.agent.training_instances == 0
             || self.agent.development_instances == 0
@@ -237,6 +409,10 @@ impl<T: SymbolicTask + Clone> ResourceEcologyTask for TaskEcology<T> {
         // still share all stochastic draws within a generation, but evolution
         // cannot be ranked on a moving target distribution.
         let panel_seed = mix64(run_seed ^ TRAINING_DOMAIN);
+        // All instances of one genome start from an identical expressed brain:
+        // express once, then memcpy-clone per instance (expression involves
+        // innovation hashing + validation and dominated small-panel setups).
+        let base_brain = express_genome(genome);
         Ok(TaskEvaluationState {
             instances: (0..self.agent.training_instances)
                 .flat_map(|index| {
@@ -244,7 +420,7 @@ impl<T: SymbolicTask + Clone> ResourceEcologyTask for TaskEcology<T> {
                 })
                 .map(|(index, rollout)| Instance {
                     task: self.task.start(panel_seed, index),
-                    brain: express_genome(genome),
+                    brain: base_brain.clone(),
                     sample_seed: mix64(
                         panel_seed
                             ^ ACTION_DOMAIN
@@ -262,7 +438,7 @@ impl<T: SymbolicTask + Clone> ResourceEcologyTask for TaskEcology<T> {
         state: &mut Self::LifetimeState,
         _context: ResourceLifetimeContext,
     ) -> Result<ResourceLifetimeOutcome<Self::LifetimeEvaluation>> {
-        let metrics = self.evaluate_instances(genome, &mut state.instances, Condition::Primary);
+        let metrics = self.evaluate_instances(genome, &mut state.instances);
         Ok(ResourceLifetimeOutcome {
             reproductive_tickets: metrics.resource_units,
             work: TaskWorkReport {
@@ -290,7 +466,7 @@ impl<T: SymbolicTask + Clone> ResourceEcologyTask for TaskEcology<T> {
                 self.agent.development_rollouts,
             )
         };
-        let evaluate = |condition| {
+        let evaluate = || {
             let panel_seed = mix64(audit_seed ^ domain);
             let mut instances = (0..instance_count)
                 .flat_map(|index| (0..rollout_count).map(move |rollout| (index, rollout)))
@@ -306,13 +482,11 @@ impl<T: SymbolicTask + Clone> ResourceEcologyTask for TaskEcology<T> {
                     sample_tick: 0,
                 })
                 .collect::<Vec<_>>();
-            self.evaluate_instances(genome, &mut instances, condition)
+            self.evaluate_instances(genome, &mut instances)
         };
         Ok(SymbolicEcologyAudit {
             cohort: cohort.to_owned(),
-            primary: evaluate(Condition::Primary),
-            efference_copy_off: evaluate(Condition::EfferenceCopyOff),
-            prediction_error_feedback_off: evaluate(Condition::PredictionErrorFeedbackOff),
+            primary: evaluate(),
         })
     }
     fn audit_score(&self, audit: &Self::AuditEvaluation) -> f64 {
@@ -325,28 +499,181 @@ impl<T: SymbolicTask + Clone> ResourceEcologyTask for TaskEcology<T> {
 }
 
 impl<T: SymbolicTask> TaskEcology<T> {
-    fn evaluate_instances(
+        /// Serial twin of `evaluate_instances`: identical arithmetic, no rayon.
+    /// Used where nested parallelism would be unsafe (e.g. forge scoring runs
+    /// while the co-evolution state mutex is held).
+    pub(crate) fn evaluate_instances_serial(
         &self,
         genome: &OrganismGenome,
         instances: &mut [Instance<T::State>],
-        condition: Condition,
     ) -> SymbolicEcologyMetrics {
+        let panel_count = instances.len();
         let mut metrics = SymbolicEcologyMetrics {
-            instances: instances.len(),
+            instances: panel_count,
             ..Default::default()
         };
-        let (mut rewards, mut errors, mut predictions, mut deltas) = (0.0, 0.0, 0.0, 0.0);
-        let mut probe_sequence_probability_sum = 0.0;
+        let mut scalars = InstanceScalars::default();
         for instance in instances {
-            let mut scratch = BrainScratch::new();
-            let mut immediate_update_scratch = Vec::new();
+            self.evaluate_one_instance(genome, instance, &mut metrics, &mut scalars);
+        }
+        let mut probe_sequence_probability_sum = scalars.probe_sequence_probability_sum;
+        Self::finalize_metrics(&mut metrics, &mut probe_sequence_probability_sum, &mut scalars);
+        metrics
+    }
+
+    /// Shared derivation tail for both evaluation variants.
+    fn finalize_metrics(
+        metrics: &mut SymbolicEcologyMetrics,
+        probe_sequence_probability_sum: &mut f64,
+        scalars: &mut InstanceScalars,
+    ) {
+        let (rewards, errors, predictions, deltas) = (
+            scalars.rewards,
+            scalars.errors,
+            scalars.predictions,
+            scalars.deltas,
+        );
+        if metrics.learning_ticks > 0 {
+            metrics.learning_accuracy =
+                metrics.learning_correct as f64 / metrics.learning_ticks as f64;
+            metrics.mean_reward = rewards / metrics.learning_ticks as f64;
+            metrics.mean_absolute_prediction_error = errors / metrics.learning_ticks as f64;
+            metrics.mean_reward_prediction = predictions / metrics.learning_ticks as f64;
+        }
+        if metrics.probe_ticks > 0 {
+            metrics.probe_accuracy = metrics.probe_correct as f64 / metrics.probe_ticks as f64;
+            metrics.mean_probe_target_probability /= metrics.probe_ticks as f64;
+            metrics.mean_probe_sequence_probability =
+                *probe_sequence_probability_sum / metrics.instances as f64;
+            metrics.accuracy = metrics.probe_accuracy;
+        } else if metrics.learning_ticks > 0 {
+            metrics.accuracy = metrics.learning_accuracy;
+        }
+        if metrics.ticks > 0 {
+            metrics.resource_throughput_per_1000_ticks =
+                metrics.resource_units as f64 * 1000.0 / metrics.ticks as f64;
+        }
+        if metrics.completed_trials > 0 {
+            metrics.trial_success_rate =
+                metrics.successful_trials as f64 / metrics.completed_trials as f64;
+        }
+        if metrics.edge_evaluation_count > 0 {
+            metrics.mean_absolute_applied_delta = deltas / metrics.edge_evaluation_count as f64;
+        }
+    }
+
+    pub(crate) fn evaluate_instances(
+        &self,
+        genome: &OrganismGenome,
+        instances: &mut [Instance<T::State>],
+    ) -> SymbolicEcologyMetrics {
+        
+        // Panels with several instances evaluate them as independent parallel
+        // work items: large panels (memory, co-evolution pilots) otherwise
+        // strand workers behind one straggler genome. Integer metric fields
+        // merge associatively and stay exact; per-tick f64 diagnostic sums
+        // (reward/prediction/delta averages) may differ in the last ulp from
+        // sequential accumulation when instances >= 2. Selection-relevant
+        // quantities (resource_units, correct/tick counts) remain exact.
+        const MAX_CHUNKS: usize = 8;
+        use rayon::prelude::*;
+        let panel_count = instances.len();
+        let mut metrics = SymbolicEcologyMetrics {
+            instances: panel_count,
+            ..Default::default()
+        };
+        let mut probe_sequence_probability_sum = 0.0_f64;
+        let mut totals = InstanceScalars::default();
+        let chunk_len = panel_count.div_ceil(MAX_CHUNKS).max(1);
+        let partials = instances
+            .par_chunks_mut(chunk_len)
+            .map(|chunk| {
+                let mut part = (SymbolicEcologyMetrics::default(), InstanceScalars::default());
+                for instance in chunk {
+                    self.evaluate_one_instance(genome, instance, &mut part.0, &mut part.1);
+                }
+                part
+            })
+            .collect::<Vec<_>>();
+        for (part_metrics, scalars) in partials {
+            metrics.brain_synapse_operations += part_metrics.brain_synapse_operations;
+            metrics.ticks += part_metrics.ticks;
+            metrics.correct += part_metrics.correct;
+            metrics.learning_ticks += part_metrics.learning_ticks;
+            metrics.learning_correct += part_metrics.learning_correct;
+            metrics.probe_ticks += part_metrics.probe_ticks;
+            metrics.probe_correct += part_metrics.probe_correct;
+            metrics.mean_probe_target_probability +=
+                part_metrics.mean_probe_target_probability;
+            metrics.completed_trials += part_metrics.completed_trials;
+            metrics.successful_trials += part_metrics.successful_trials;
+            metrics.resource_units += part_metrics.resource_units;
+            metrics.edge_evaluation_count += part_metrics.edge_evaluation_count;
+            metrics.internal_edge_evaluation_count +=
+                part_metrics.internal_edge_evaluation_count;
+            metrics.action_edge_evaluation_count += part_metrics.action_edge_evaluation_count;
+            metrics.value_edge_evaluation_count += part_metrics.value_edge_evaluation_count;
+            metrics.nonzero_internal_edge_update_count +=
+                part_metrics.nonzero_internal_edge_update_count;
+            metrics.nonzero_action_edge_update_count +=
+                part_metrics.nonzero_action_edge_update_count;
+            metrics.nonzero_value_edge_update_count +=
+                part_metrics.nonzero_value_edge_update_count;
+            metrics.internal_applied_absolute_delta +=
+                part_metrics.internal_applied_absolute_delta;
+            metrics.action_applied_absolute_delta += part_metrics.action_applied_absolute_delta;
+            metrics.value_applied_absolute_delta += part_metrics.value_applied_absolute_delta;
+            metrics.clipped_update_count += part_metrics.clipped_update_count;
+            probe_sequence_probability_sum += scalars.probe_sequence_probability_sum;
+            totals.rewards += scalars.rewards;
+            totals.errors += scalars.errors;
+            totals.predictions += scalars.predictions;
+            totals.deltas += scalars.deltas;
+        }
+        Self::finalize_metrics(&mut metrics, &mut probe_sequence_probability_sum, &mut totals);
+        metrics
+    }
+}
+
+/// Evaluation result for one population member, decoupled from the task-side
+/// lifetime state so a population-wide flattened schedule can produce them in
+/// bulk.
+#[derive(Debug, Clone)]
+pub struct PopulationOutcome<E> {
+    pub reproductive_tickets: u64,
+    pub work: TaskWorkReport,
+    pub evaluation: E,
+}
+
+/// Per-instance f64 sample sums carried out of `evaluate_one_instance`.
+#[derive(Default)]
+struct InstanceScalars {
+    rewards: f64,
+    errors: f64,
+    predictions: f64,
+    deltas: f64,
+    /// One contribution per instance (its greedy-probe sequence product), so
+    /// ordered merging reproduces the historical accumulation exactly.
+    probe_sequence_probability_sum: f64,
+}
+
+impl<T: SymbolicTask> TaskEcology<T> {
+    #[allow(clippy::too_many_arguments)]
+    fn evaluate_one_instance(
+        &self,
+        genome: &OrganismGenome,
+        instance: &mut Instance<T::State>,
+        metrics: &mut SymbolicEcologyMetrics,
+        scalars: &mut InstanceScalars,
+    ) {
+        let mut scratch = BrainScratch::new();
             for _ in 0..self.task.max_steps_per_instance() {
                 apply_observation(&mut instance.brain, self.task.observe(&instance.task));
                 let brain_eval = evaluate_brain_state(
                     &mut instance.brain,
                     genome,
                     BrainEvalContext {
-                        leaky_neurons_enabled: false,
+                        leaky_neurons_enabled: self.agent.temporal_credit_leaky,
                         action_temperature: 1.0,
                         action_sample: None,
                     },
@@ -367,96 +694,53 @@ impl<T: SymbolicTask> TaskEcology<T> {
                     ),
                 };
                 let transition = self.task.step(&mut instance.task, selected);
-                let (edge_updates, clipped_updates, applied_delta, prediction_error, prediction) =
-                    match self.agent.learning_rule {
-                        LearningRule::Disabled => {
-                            instance.brain.previous_action_activations.fill(0.0);
-                            instance.brain.previous_action_activations[selected.index()] = 1.0;
-                            instance.brain.previous_prediction_error = 0.0;
-                            (0, 0, 0.0, 0.0, 0.0)
+                let action_signal = match self.agent.learning_rule {
+                    LearningRule::RewardPredictionError => {
+                        ActionLearningSignal::RewardPredictionError { selected }
+                    }
+                    LearningRule::CategoricalPredictionError => {
+                        let target = transition.teaching_target.expect(
+                            "categorical prediction learning requires a learner-visible target",
+                        );
+                        ActionLearningSignal::CategoricalPredictionError {
+                            target,
+                            probabilities,
                         }
-                        LearningRule::ImmediatePolicy => {
-                            let report = apply_immediate_action_reward(
-                                &mut instance.brain,
-                                ImmediateLearningRequest {
-                                    selected,
-                                    action_probabilities: probabilities,
-                                    reward: transition.reward,
-                                    learning_rate: genome.plasticity.initial_learning_rate,
-                                    fast_weight_retention: genome.plasticity.fast_weight_retention,
-                                    max_weight_delta: genome.plasticity.max_weight_delta_per_tick,
-                                    normalization: self.agent.learning_normalization.into(),
-                                },
-                                &mut immediate_update_scratch,
-                            );
-                            instance.brain.previous_action_activations.fill(0.0);
-                            instance.brain.previous_action_activations[selected.index()] = 1.0;
-                            instance.brain.previous_prediction_error = transition.reward;
-                            (
-                                report.edge_update_count,
-                                report.clipped_update_count,
-                                report.applied_absolute_delta,
-                                transition.reward,
-                                0.0,
-                            )
-                        }
-                        LearningRule::TargetPredictionError => {
-                            let target = transition.expected_action.expect(
-                                "target-prediction learning requires an expected task action",
-                            );
-                            let report = apply_target_prediction_error(
-                                &mut instance.brain,
-                                TargetPredictionLearningRequest {
-                                    target,
-                                    action_probabilities: probabilities,
-                                    learning_rate: genome.plasticity.initial_learning_rate,
-                                    fast_weight_retention: genome.plasticity.fast_weight_retention,
-                                    max_weight_delta: genome.plasticity.max_weight_delta_per_tick,
-                                    normalization: self.agent.learning_normalization.into(),
-                                },
-                            );
-                            let target_error = 1.0 - probabilities[target.index()];
-                            instance.brain.previous_action_activations.fill(0.0);
-                            instance.brain.previous_action_activations[selected.index()] = 1.0;
-                            instance.brain.previous_prediction_error = target_error;
-                            (
-                                report.edge_update_count,
-                                report.clipped_update_count,
-                                report.applied_absolute_delta,
-                                target_error,
-                                probabilities[target.index()],
-                            )
-                        }
-                        LearningRule::TemporalPredictionError => {
-                            let report = apply_temporal_action_reward(
-                                &mut instance.brain,
-                                TemporalLearningRequest {
-                                    selected,
-                                    reward: transition.reward,
-                                    value_prediction: brain_eval.value_prediction,
-                                    learning_rate: genome.plasticity.initial_learning_rate,
-                                    eligibility_retention: genome.plasticity.eligibility_retention,
-                                    fast_weight_retention: genome.plasticity.fast_weight_retention,
-                                    max_weight_delta: genome.plasticity.max_weight_delta_per_tick,
-                                    normalization: self.agent.learning_normalization.into(),
-                                    plasticity_enabled: true,
-                                },
-                            );
-                            (
-                                report.edge_update_count,
-                                report.clipped_update_count,
-                                report.applied_absolute_delta,
-                                report.prediction_error,
-                                report.reward_prediction,
-                            )
-                        }
-                    };
-                if matches!(condition, Condition::EfferenceCopyOff) {
-                    instance.brain.previous_action_activations.fill(0.0);
-                }
-                if matches!(condition, Condition::PredictionErrorFeedbackOff) {
-                    instance.brain.previous_prediction_error = 0.0;
-                }
+                    }
+                };
+                accumulate_synaptic_eligibilities(
+                    &mut instance.brain,
+                    &mut scratch,
+                    EligibilityRequest {
+                        action_signal,
+                        value_prediction: brain_eval.value_prediction,
+                        normalization: self.agent.learning_normalization.into(),
+                        leaky_neurons_enabled: self.agent.temporal_credit_leaky,
+                        eligibility_retention: genome.plasticity.eligibility_retention,
+                    },
+                );
+                // Predictive-coding tasks run with no critic: hidden plasticity
+                // is driven by the neuromodulatory channels, not reward surprise.
+                let predictive_coding = !self.task.uses_value_critic();
+                let prediction_error = if predictive_coding {
+                    0.0
+                } else {
+                    transition.reward - brain_eval.value_prediction
+                };
+                let report = apply_three_factor_learning(
+                    &mut instance.brain,
+                    ThreeFactorLearningRequest {
+                        action_signal,
+                        reward_prediction_error: prediction_error,
+                        learning_rate: genome.plasticity.initial_learning_rate,
+                        eligibility_retention: genome.plasticity.eligibility_retention,
+                        fast_weight_retention: genome.plasticity.fast_weight_retention,
+                        max_weight_delta: genome.plasticity.max_weight_delta_per_tick,
+                        hidden_categorical_feedback: self.agent.hidden_categorical_feedback,
+                        predictive_coding,
+                    },
+                );
+                store_action_efference_copy(&mut instance.brain, selected);
                 metrics.ticks += 1;
                 metrics.learning_ticks += 1;
                 metrics.learning_correct += u64::from(transition.correct);
@@ -468,16 +752,26 @@ impl<T: SymbolicTask> TaskEcology<T> {
                         metrics.successful_trials += u64::from(successful);
                     }
                 }
-                metrics.edge_update_count += edge_updates;
-                metrics.clipped_update_count += clipped_updates;
-                rewards += f64::from(transition.reward);
-                errors += f64::from(prediction_error.abs());
-                predictions += f64::from(prediction);
-                deltas += applied_delta;
+                metrics.edge_evaluation_count += report.edge_evaluation_count;
+                metrics.internal_edge_evaluation_count += report.internal_edge_evaluation_count;
+                metrics.action_edge_evaluation_count += report.action_edge_evaluation_count;
+                metrics.value_edge_evaluation_count += report.value_edge_evaluation_count;
+                metrics.nonzero_internal_edge_update_count +=
+                    report.nonzero_internal_edge_update_count;
+                metrics.nonzero_action_edge_update_count += report.nonzero_action_edge_update_count;
+                metrics.nonzero_value_edge_update_count += report.nonzero_value_edge_update_count;
+                metrics.internal_applied_absolute_delta += report.internal_applied_absolute_delta;
+                metrics.action_applied_absolute_delta += report.action_applied_absolute_delta;
+                metrics.value_applied_absolute_delta += report.value_applied_absolute_delta;
+                metrics.clipped_update_count += report.clipped_update_count;
+                scalars.rewards += f64::from(transition.reward);
+                scalars.errors += f64::from(prediction_error.abs());
+                scalars.predictions += f64::from(brain_eval.value_prediction);
+                scalars.deltas += report.applied_absolute_delta;
                 instance.sample_tick += 1;
                 if transition.trial_outcome.is_some() && self.agent.reset_dynamics_at_trial_boundary
                 {
-                    reset_dynamics_preserving_weights(&mut instance.brain);
+                    reset_episode_state_preserving_weights(&mut instance.brain);
                 }
                 if transition.done {
                     break;
@@ -486,7 +780,7 @@ impl<T: SymbolicTask> TaskEcology<T> {
 
             let probe_steps = self.task.probe_steps_per_instance();
             if probe_steps > 0 {
-                reset_dynamics_preserving_weights(&mut instance.brain);
+                reset_episode_state_preserving_weights(&mut instance.brain);
                 self.task.begin_probe(&mut instance.task);
                 let mut sequence_probability = 1.0;
                 for _ in 0..probe_steps {
@@ -495,7 +789,7 @@ impl<T: SymbolicTask> TaskEcology<T> {
                         &mut instance.brain,
                         genome,
                         BrainEvalContext {
-                            leaky_neurons_enabled: false,
+                            leaky_neurons_enabled: self.agent.temporal_credit_leaky,
                             action_temperature: 1.0,
                             action_sample: None,
                         },
@@ -510,6 +804,7 @@ impl<T: SymbolicTask> TaskEcology<T> {
                     );
                     let selected = argmax_action(&self.task, brain_eval.action_logits);
                     let transition = self.task.probe_step(&mut instance.task, selected);
+                    store_action_efference_copy(&mut instance.brain, selected);
                     if let Some(expected) = transition.expected_action {
                         sequence_probability *= f64::from(probabilities[expected.index()]);
                         metrics.mean_probe_target_probability +=
@@ -528,37 +823,8 @@ impl<T: SymbolicTask> TaskEcology<T> {
                         break;
                     }
                 }
-                probe_sequence_probability_sum += sequence_probability;
+                scalars.probe_sequence_probability_sum += sequence_probability;
             }
-        }
-        if metrics.learning_ticks > 0 {
-            metrics.learning_accuracy =
-                metrics.learning_correct as f64 / metrics.learning_ticks as f64;
-            metrics.mean_reward = rewards / metrics.learning_ticks as f64;
-            metrics.mean_absolute_prediction_error = errors / metrics.learning_ticks as f64;
-            metrics.mean_reward_prediction = predictions / metrics.learning_ticks as f64;
-        }
-        if metrics.probe_ticks > 0 {
-            metrics.probe_accuracy = metrics.probe_correct as f64 / metrics.probe_ticks as f64;
-            metrics.mean_probe_target_probability /= metrics.probe_ticks as f64;
-            metrics.mean_probe_sequence_probability =
-                probe_sequence_probability_sum / metrics.instances as f64;
-            metrics.accuracy = metrics.probe_accuracy;
-        } else if metrics.learning_ticks > 0 {
-            metrics.accuracy = metrics.learning_accuracy;
-        }
-        if metrics.ticks > 0 {
-            metrics.resource_throughput_per_1000_ticks =
-                metrics.resource_units as f64 * 1000.0 / metrics.ticks as f64;
-        }
-        if metrics.completed_trials > 0 {
-            metrics.trial_success_rate =
-                metrics.successful_trials as f64 / metrics.completed_trials as f64;
-        }
-        if metrics.edge_update_count > 0 {
-            metrics.mean_absolute_applied_delta = deltas / metrics.edge_update_count as f64;
-        }
-        metrics
     }
 }
 
